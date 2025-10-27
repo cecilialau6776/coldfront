@@ -66,6 +66,8 @@ INSTALLED_APPS += [
     "django_q",
     "simple_history",
     "fontawesome_free",
+    "taggit",
+    "treenode",
 ]
 
 if DEBUG and importlib.util.find_spec("sslserver") is not None:
@@ -85,6 +87,7 @@ INSTALLED_APPS += [
     "coldfront.core.grant",
     "coldfront.core.publication",
     "coldfront.core.research_output",
+    "coldfront.core.tag",
 ]
 
 # ------------------------------------------------------------------------------
