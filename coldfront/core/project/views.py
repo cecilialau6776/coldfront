@@ -832,6 +832,12 @@ class ProjectAddUsersView(LoginRequiredMixin, UserPassesTestMixin, View):
                             status=project_user_active_status_choice,
                         )
 
+                    email_context = {
+                        "user": user_obj,
+                        "project": project_obj,
+                        "allocations": [],
+                    }
+
                     # project signals
                     project_activate_user.send(sender=self.__class__, project_user_pk=project_user_obj.pk)
 
@@ -855,9 +861,18 @@ class ProjectAddUsersView(LoginRequiredMixin, UserPassesTestMixin, View):
                                 allocation=allocation, user=user_obj, status=user_status_choice
                             )
                         if user_status_choice == allocation_user_active_status_choice:
+                            email_context["allocations"].append(allocation)
                             allocation_activate_user.send(
                                 sender=self.__class__, allocation_user_pk=allocation_user_obj.pk
                             )
+
+                    send_email_template(
+                        "You have been added to a project",
+                        "email/user_added_to_project.txt",
+                        email_context,
+                        EMAIL_SENDER,
+                        [user_obj.email],
+                    )
 
             messages.success(request, "Added {} users to project.".format(added_users_count))
         else:

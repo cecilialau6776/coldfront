@@ -62,7 +62,10 @@ def send_email_template(subject, template_name, template_context, sender, receiv
     if not EMAIL_ENABLED:
         return
 
-    body = render_to_string(template_name, template_context)
+    ctx = email_template_context()
+    ctx.update(template_context)
+
+    body = render_to_string(template_name, ctx)
 
     return send_email(subject, body, sender, receiver_list, cc=cc)
 
@@ -73,6 +76,7 @@ def email_template_context():
         "center_name": EMAIL_CENTER_NAME,
         "signature": EMAIL_SIGNATURE,
         "opt_out_instruction_url": EMAIL_OPT_OUT_INSTRUCTION_URL,
+        "center_base_url": CENTER_BASE_URL,
     }
 
 
