@@ -93,6 +93,7 @@ if INVOICE_ENABLED:
 ALLOCATION_ACCOUNT_ENABLED = import_from_settings("ALLOCATION_ACCOUNT_ENABLED", False)
 ALLOCATION_ACCOUNT_MAPPING = import_from_settings("ALLOCATION_ACCOUNT_MAPPING", {})
 
+EMAIL_SENDER = import_from_settings("EMAIL_SENDER")
 EMAIL_ALLOCATION_EULA_IGNORE_OPT_OUT = import_from_settings("EMAIL_ALLOCATION_EULA_IGNORE_OPT_OUT", False)
 EMAIL_ALLOCATION_EULA_CONFIRMATIONS = import_from_settings("EMAIL_ALLOCATION_EULA_CONFIRMATIONS", False)
 EMAIL_ALLOCATION_EULA_CONFIRMATIONS_CC_MANAGERS = import_from_settings(
@@ -880,6 +881,11 @@ class AllocationAddUsersView(LoginRequiredMixin, UserPassesTestMixin, TemplateVi
 
                     user_obj = get_user_model().objects.get(username=user_form_data.get("username"))
 
+                    email_context = {
+                        "user": user_obj,
+                        "allocation": allocation_obj,
+                    }
+
                     if allocation_obj.allocationuser_set.filter(user=user_obj).exists():
                         allocation_user_obj = allocation_obj.allocationuser_set.get(user=user_obj)
                         if ALLOCATION_EULA_ENABLE and not user_obj.userprofile.is_pi and allocation_obj.get_eula():
@@ -924,6 +930,13 @@ class AllocationAddUsersView(LoginRequiredMixin, UserPassesTestMixin, TemplateVi
                             )
 
                     if allocation_user_obj.status == allocation_user_active_status_choice:
+                        send_email_template(
+                            "You have been added to an allocation",
+                            "email/user_added_to_allocation.txt",
+                            email_context,
+                            EMAIL_SENDER,
+                            [user_obj.email],
+                        )
                         allocation_activate_user.send(sender=self.__class__, allocation_user_pk=allocation_user_obj.pk)
 
             user_plural = "user" if users_added_count == 1 else "users"
