@@ -8,6 +8,7 @@ from datetime import date
 
 from dateutil.relativedelta import relativedelta
 from django import forms
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
@@ -190,7 +191,6 @@ class AllocationDetailView(LoginRequiredMixin, UserPassesTestMixin, TemplateView
         notes = noteset.all() if self.request.user.is_superuser else noteset.filter(is_private=False)
 
         context["notes"] = notes
-        context["ALLOCATION_ENABLE_ALLOCATION_RENEWAL"] = ALLOCATION_ENABLE_ALLOCATION_RENEWAL
         return context
 
     def get(self, request, *args, **kwargs):
@@ -637,9 +637,10 @@ class AllocationCreateView(LoginRequiredMixin, UserPassesTestMixin, FormView):
 
         user_resources = get_user_resources(self.request.user)
         resources_form_default_quantities = {}
+        resources_form_descriptions = {}
         resources_form_label_texts = {}
         resources_with_eula = {}
-        attr_names = ("quantity_default_value", "quantity_label", "eula")
+        attr_names = ("quantity_default_value", "form_description", "quantity_label", "eula")
         for resource in user_resources:
             for attr_name in attr_names:
                 query = Q(resource_attribute_type__name=attr_name)
@@ -647,12 +648,15 @@ class AllocationCreateView(LoginRequiredMixin, UserPassesTestMixin, FormView):
                     value = resource.resourceattribute_set.get(query).value
                     if attr_name == "quantity_default_value":
                         resources_form_default_quantities[resource.id] = int(value)
+                    if attr_name == "form_description":
+                        resources_form_descriptions[resource.id] = value
                     if attr_name == "quantity_label":
                         resources_form_label_texts[resource.id] = value
                     if attr_name == "eula":
                         resources_with_eula[resource.id] = value
 
         context["resources_form_default_quantities"] = resources_form_default_quantities
+        context["resources_form_descriptions"] = resources_form_descriptions
         context["resources_form_label_texts"] = resources_form_label_texts
         context["resources_with_eula"] = resources_with_eula
         context["resources_with_accounts"] = list(
@@ -1225,8 +1229,6 @@ class AllocationRequestListView(LoginRequiredMixin, UserPassesTestMixin, Templat
         context["allocation_renewal_dates"] = allocation_renewal_dates
         context["allocation_status_active"] = AllocationStatusChoice.objects.get(name="Active")
         context["allocation_list"] = allocation_list
-        context["PROJECT_ENABLE_PROJECT_REVIEW"] = PROJECT_ENABLE_PROJECT_REVIEW
-        context["ALLOCATION_DEFAULT_ALLOCATION_LENGTH"] = ALLOCATION_DEFAULT_ALLOCATION_LENGTH
         return context
 
 
@@ -1476,7 +1478,6 @@ class AllocationInvoiceDetailView(LoginRequiredMixin, UserPassesTestMixin, Templ
             notes = allocation_obj.allocationusernote_set.filter(is_private=False)
 
         context["notes"] = notes
-        context["ALLOCATION_ENABLE_ALLOCATION_RENEWAL"] = ALLOCATION_ENABLE_ALLOCATION_RENEWAL
         return context
 
     def get(self, request, *args, **kwargs):
@@ -1647,7 +1648,7 @@ class AllocationAccountCreateView(LoginRequiredMixin, UserPassesTestMixin, Creat
     def test_func(self):
         """UserPassesTestMixin Tests"""
 
-        if not ALLOCATION_ACCOUNT_ENABLED:
+        if not settings.ALLOCATION_ACCOUNT_ENABLED:
             return False
         if self.request.user.is_superuser:
             return True
@@ -1659,14 +1660,14 @@ class AllocationAccountCreateView(LoginRequiredMixin, UserPassesTestMixin, Creat
 
     def form_invalid(self, form):
         response = super().form_invalid(form)
-        if self.request.is_ajax():
+        if self.request.headers.get("x-requested-with") == "XMLHttpRequest":
             return JsonResponse(form.errors, status=400)
         return response
 
     def form_valid(self, form):
         form.instance.user = self.request.user
         response = super().form_valid(form)
-        if self.request.is_ajax():
+        if self.request.headers.get("x-requested-with") == "XMLHttpRequest":
             data = {
                 "pk": self.object.pk,
             }
@@ -1685,7 +1686,7 @@ class AllocationAccountListView(LoginRequiredMixin, UserPassesTestMixin, ListVie
     def test_func(self):
         """UserPassesTestMixin Tests"""
 
-        if not ALLOCATION_ACCOUNT_ENABLED:
+        if not settings.ALLOCATION_ACCOUNT_ENABLED:
             return False
         if self.request.user.is_superuser:
             return True
@@ -1956,7 +1957,6 @@ class AllocationChangeListView(LoginRequiredMixin, UserPassesTestMixin, Template
             ]
         )
         context["allocation_change_list"] = allocation_change_list
-        context["PROJECT_ENABLE_PROJECT_REVIEW"] = PROJECT_ENABLE_PROJECT_REVIEW
         return context
 
 
