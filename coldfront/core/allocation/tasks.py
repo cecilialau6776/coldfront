@@ -79,7 +79,6 @@ def send_eula_reminders():
                     f"Reminder: Agree to EULA for {allocation}",
                     "email/allocation_eula_reminder.txt",
                     template_context,
-                    EMAIL_SENDER,
                     email_receiver_list,
                 )
                 logger.debug(f"Allocation(s) EULA reminder sent to users {email_receiver_list}.")
@@ -160,7 +159,6 @@ def send_expiry_emails():
                 f"Your access to {CENTER_NAME}'s resources is expiring soon",
                 "email/allocation_expiring.txt",
                 template_context,
-                EMAIL_SENDER,
                 email_receiver_list,
             )
 
@@ -238,7 +236,6 @@ def send_expiry_emails():
                 "Your access to resource(s) have expired",
                 "email/allocation_expired.txt",
                 template_context,
-                EMAIL_SENDER,
                 email_receiver_list,
             )
 
@@ -256,8 +253,5 @@ def send_expiry_emails():
                 "Allocation(s) have expired",
                 "email/admin_allocation_expired.txt",
                 admin_template_context,
-                EMAIL_SENDER,
-                [
-                    EMAIL_ADMIN_LIST,
-                ],
+                [EMAIL_ADMIN_LIST],
             )

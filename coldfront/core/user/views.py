@@ -223,7 +223,6 @@ class UserUpgradeAccount(LoginRequiredMixin, UserPassesTestMixin, View):
                 "Upgrade Account Request",
                 "email/upgrade_account_request.txt",
                 {"user": request.user},
-                EMAIL_SENDER,
                 [EMAIL_TICKET_SYSTEM_ADDRESS],
             )
 

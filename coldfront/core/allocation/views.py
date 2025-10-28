@@ -900,8 +900,8 @@ class AllocationAddUsersView(LoginRequiredMixin, UserPassesTestMixin, TemplateVi
                                         domain_url=get_domain_url(self.request),
                                     ),
                                 },
-                                self.request.user.email,
                                 [user_obj],
+                                sender=self.request.user.email,
                             )
                         else:
                             allocation_user_obj.status = allocation_user_active_status_choice
@@ -921,8 +921,8 @@ class AllocationAddUsersView(LoginRequiredMixin, UserPassesTestMixin, TemplateVi
                                         domain_url=get_domain_url(self.request),
                                     ),
                                 },
-                                self.request.user.email,
                                 [user_obj],
+                                sender=self.request.user.email,
                             )
                         else:
                             allocation_user_obj = AllocationUser.objects.create(
@@ -934,7 +934,6 @@ class AllocationAddUsersView(LoginRequiredMixin, UserPassesTestMixin, TemplateVi
                             "You have been added to an allocation",
                             "email/user_added_to_allocation.txt",
                             email_context,
-                            EMAIL_SENDER,
                             [user_obj.email],
                         )
                         allocation_activate_user.send(sender=self.__class__, allocation_user_pk=allocation_user_obj.pk)

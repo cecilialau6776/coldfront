@@ -24,18 +24,18 @@ EMAIL_CENTER_NAME = import_from_settings("CENTER_NAME")
 CENTER_BASE_URL = import_from_settings("CENTER_BASE_URL")
 
 
-def send_email(subject, body, sender, receiver_list, cc=[]):
+def send_email(subject, body, sender, receiver_list, cc=None):
     """Helper function for sending emails"""
 
     if not EMAIL_ENABLED:
         return
 
     if len(receiver_list) == 0:
-        logger.error("Failed to send email missing receiver_list")
+        logger.error("Failed to send email: missing receiver_list")
         return
 
     if len(sender) == 0:
-        logger.error("Failed to send email missing sender address")
+        logger.error("Failed to send email: missing sender address")
         return
 
     if len(EMAIL_SUBJECT_PREFIX) > 0:
@@ -48,20 +48,23 @@ def send_email(subject, body, sender, receiver_list, cc=[]):
         cc = EMAIL_DEVELOPMENT_EMAIL_LIST
 
     try:
-        if cc:
-            email = EmailMessage(subject, body, sender, receiver_list, cc=cc)
-            email.send(fail_silently=False)
-        else:
-            send_mail(subject, body, sender, receiver_list, fail_silently=False)
+        email = EmailMessage(subject, body, sender, receiver_list, cc=cc)
+        email.send(fail_silently=False)
     except SMTPException:
         logger.error("Failed to send email from %s to %s with subject %s", sender, ",".join(receiver_list), subject)
 
 
-def send_email_template(subject, template_name, template_context, sender, receiver_list, cc=[]):
-    """Helper function for sending emails from a template"""
-    if not EMAIL_ENABLED:
-        return
+def send_email_template(subject, template_name, template_context, receiver_list, sender=EMAIL_SENDER, cc=None):
+    """Helper function for sending emails from a template.
 
+    Args:
+        subject: The email subject.
+        template_name: The name of the template to render.
+        template_context: A dict containing the context to pass into the template.
+        receiver_list: A list of recipients.
+        sender_email: The email to send from. Defaults to EMAIL_SENDER.
+        cc: Email address(es) to be cc'd. Can be a string or list.
+    """
     ctx = email_template_context()
     ctx.update(template_context)
 
@@ -92,10 +95,7 @@ def send_admin_email_template(subject, template_name, template_context):
         subject,
         template_name,
         template_context,
-        EMAIL_SENDER,
-        [
-            EMAIL_TICKET_SYSTEM_ADDRESS,
-        ],
+        [EMAIL_TICKET_SYSTEM_ADDRESS],
     )
 
 
@@ -136,7 +136,7 @@ def send_allocation_customer_email(allocation_obj, subject, template_name, url_p
         if allocation_user.allocation.project.projectuser_set.get(user=allocation_user.user).enable_notifications:
             email_receiver_list.append(allocation_user.user.email)
 
-    send_email_template(subject, template_name, ctx, EMAIL_SENDER, email_receiver_list)
+    send_email_template(subject, template_name, ctx, email_receiver_list)
 
 
 def send_allocation_eula_customer_email(
@@ -167,4 +167,4 @@ def send_allocation_eula_customer_email(
             if manager.enable_notifications:
                 email_cc_list.append(manager.user.email)
 
-    send_email_template(subject, template_name, ctx, EMAIL_SENDER, email_receiver_list, cc=email_cc_list)
+    send_email_template(subject, template_name, ctx, email_receiver_list, cc=email_cc_list)

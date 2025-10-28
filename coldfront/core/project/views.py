@@ -911,7 +911,6 @@ class ProjectAddUsersView(LoginRequiredMixin, UserPassesTestMixin, View):
                         "You have been added to a project",
                         "email/user_added_to_project.txt",
                         email_context,
-                        EMAIL_SENDER,
                         [user_obj.email],
                     )
 
@@ -1256,10 +1255,7 @@ class ProjectReviewView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
                     "New project review has been submitted",
                     "email/new_project_review.txt",
                     email_context,
-                    EMAIL_SENDER,
-                    [
-                        EMAIL_DIRECTOR_EMAIL_ADDRESS,
-                    ],
+                    [EMAIL_DIRECTOR_EMAIL_ADDRESS],
                 )
 
             messages.success(request, "Project reviewed successfully.")
