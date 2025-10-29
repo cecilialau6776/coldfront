@@ -519,6 +519,21 @@ class ProjectArchiveProjectView(LoginRequiredMixin, UserPassesTestMixin, Templat
         # project signals
         project_archive.send(sender=self.__class__, project_obj=project)
 
+        # send email to project members
+        email_recipients = set(
+            project.projectuser_set.filter(status__name="Active", enable_notifications=True).values_list(
+                "user__email", flat=True
+            )
+        )
+        email_recipients.add(project.pi.email)
+
+        send_email_template(
+            "Project has been archived",
+            "email/project_archived.txt",
+            {"project": project},
+            email_recipients,
+        )
+
         for allocation in project.allocation_set.filter(status__name="Active"):
             allocation.status = allocation_status_expired
             allocation.end_date = end_date
