@@ -72,13 +72,10 @@ from coldfront.core.user.utils import CombinedUserSearch
 from coldfront.core.utils.common import get_domain_url, import_from_settings
 from coldfront.core.utils.mail import send_email, send_email_template
 
-EMAIL_ENABLED = import_from_settings("EMAIL_ENABLED", False)
 ALLOCATION_ENABLE_ALLOCATION_RENEWAL = import_from_settings("ALLOCATION_ENABLE_ALLOCATION_RENEWAL", True)
 ALLOCATION_DEFAULT_ALLOCATION_LENGTH = import_from_settings("ALLOCATION_DEFAULT_ALLOCATION_LENGTH", 365)
 
-if EMAIL_ENABLED:
-    EMAIL_DIRECTOR_EMAIL_ADDRESS = import_from_settings("EMAIL_DIRECTOR_EMAIL_ADDRESS")
-    EMAIL_SENDER = import_from_settings("EMAIL_SENDER")
+EMAIL_DIRECTOR_EMAIL_ADDRESS = import_from_settings("EMAIL_DIRECTOR_EMAIL_ADDRESS")
 
 PROJECT_CODE = import_from_settings("PROJECT_CODE", False)
 PROJECT_CODE_PADDING = import_from_settings("PROJECT_CODE_PADDING", False)
@@ -1250,13 +1247,12 @@ class ProjectReviewView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
                 "project_review_list_url": project_review_list_url,
             }
 
-            if EMAIL_ENABLED:
-                send_email_template(
-                    "New project review has been submitted",
-                    "email/new_project_review.txt",
-                    email_context,
-                    [EMAIL_DIRECTOR_EMAIL_ADDRESS],
-                )
+            send_email_template(
+                "New project review has been submitted",
+                "email/new_project_review.txt",
+                email_context,
+                [EMAIL_DIRECTOR_EMAIL_ADDRESS],
+            )
 
             messages.success(request, "Project reviewed successfully.")
             return HttpResponseRedirect(reverse("project-detail", kwargs={"pk": project_obj.pk}))
