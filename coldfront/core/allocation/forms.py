@@ -134,17 +134,29 @@ class AllocationForm(forms.ModelForm):
         return form_data
 
 
-class AllocationUpdateForm(forms.Form):
+class AllocationUpdateForm(forms.ModelForm):
+    class Meta:
+        model = Allocation
+        fields = [
+            "status",
+            "start_date",
+            "end_date",
+            "description",
+            "is_locked",
+            "is_changeable",
+        ]
+
     status = forms.ModelChoiceField(
         queryset=AllocationStatusChoice.objects.all().order_by(Lower("name")), empty_label=None
     )
-    start_date = forms.DateField(
-        label="Start Date", widget=forms.DateInput(attrs={"class": "datepicker"}), required=False
-    )
-    end_date = forms.DateField(label="End Date", widget=forms.DateInput(attrs={"class": "datepicker"}), required=False)
-    description = forms.CharField(max_length=512, label="Description", required=False)
-    is_locked = forms.BooleanField(required=False)
-    is_changeable = forms.BooleanField(required=False)
+    start_date = forms.DateField(widget=forms.DateInput(attrs={"class": "datepicker"}), required=False)
+    end_date = forms.DateField(widget=forms.DateInput(attrs={"class": "datepicker"}), required=False)
+
+    def __init__(self, request_user, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not request_user.is_superuser:
+            self.fields["is_locked"].disabled = True
+            self.fields["is_changeable"].disabled = True
 
     def clean(self):
         cleaned_data = super().clean()

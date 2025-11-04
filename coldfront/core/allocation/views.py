@@ -20,8 +20,8 @@ from django.http import HttpResponseBadRequest, HttpResponseRedirect, JsonRespon
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse, reverse_lazy
 from django.views import View
-from django.views.generic import ListView, TemplateView
-from django.views.generic.edit import CreateView, FormView, UpdateView
+from django.views.generic import DetailView, ListView, TemplateView
+from django.views.generic.edit import CreateView, FormView, ModelFormMixin, ProcessFormView, UpdateView
 
 from coldfront.config.core import ALLOCATION_EULA_ENABLE
 from coldfront.core.allocation.forms import (
@@ -102,8 +102,9 @@ EMAIL_ALLOCATION_EULA_INCLUDE_ACCEPTED_EULA = import_from_settings("EMAIL_ALLOCA
 logger = logging.getLogger(__name__)
 
 
-class AllocationDetailView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
+class AllocationDetailView(LoginRequiredMixin, UserPassesTestMixin, DetailView, UpdateView):
     model = Allocation
+    form_class = AllocationUpdateForm
     template_name = "allocation/allocation_detail.html"
     context_object_name = "allocation"
 
@@ -186,148 +187,122 @@ class AllocationDetailView(LoginRequiredMixin, UserPassesTestMixin, TemplateView
         context["notes"] = notes
         return context
 
-    def get(self, request, *args, **kwargs):
-        pk = self.kwargs.get("pk")
-        allocation_obj = get_object_or_404(Allocation, pk=pk)
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs.update({"request_user": self.request.user})
+        return kwargs
 
-        initial_data = {
-            "status": allocation_obj.status,
-            "end_date": allocation_obj.end_date,
-            "start_date": allocation_obj.start_date,
-            "description": allocation_obj.description,
-            "is_locked": allocation_obj.is_locked,
-            "is_changeable": allocation_obj.is_changeable,
-        }
-
-        form = AllocationUpdateForm(initial=initial_data)
-        if not self.request.user.is_superuser:
-            form.fields["is_locked"].disabled = True
-            form.fields["is_changeable"].disabled = True
-
-        context = self.get_context_data()
-        context["form"] = form
-        context["allocation"] = allocation_obj
-        return self.render_to_response(context)
+    def get_success_url(self):
+        if self.request.method == "POST":
+            action = self.request.POST.get("action")
+            if action == "auto-approve":
+                return reverse("allocation-request-list")
+        return reverse("allocation-detail", kwargs={"pk": self.kwargs.get("pk")})
 
     def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
         pk = self.kwargs.get("pk")
-        allocation_obj = get_object_or_404(Allocation, pk=pk)
-        allocation_users = allocation_obj.allocationuser_set.exclude(status__name__in=["Removed"]).order_by(
-            "user__username"
-        )
-
         if not self.request.user.is_superuser:
             messages.success(request, "You do not have permission to update the allocation")
             return HttpResponseRedirect(reverse("allocation-detail", kwargs={"pk": pk}))
-
-        initial_data = {
-            "status": allocation_obj.status,
-            "end_date": allocation_obj.end_date,
-            "start_date": allocation_obj.start_date,
-            "description": allocation_obj.description,
-            "is_locked": allocation_obj.is_locked,
-            "is_changeable": allocation_obj.is_changeable,
-        }
-        form = AllocationUpdateForm(request.POST, initial=initial_data)
-
-        if not form.is_valid():
-            context = self.get_context_data()
-            context["form"] = form
-            context["allocation"] = allocation_obj
-            return render(request, self.template_name, context)
 
         action = request.POST.get("action")
         if action not in ["update", "approve", "auto-approve", "deny"]:
             return HttpResponseBadRequest("Invalid request")
 
-        form_data = form.cleaned_data
+        # form pre-processing
+        form_kwargs = self.get_form_kwargs()
+        dirty_form_data = form_kwargs["data"].copy()
 
-        old_status = allocation_obj.status.name
-
-        if action in ["update", "approve", "deny"]:
-            allocation_obj.end_date = form_data.get("end_date")
-            allocation_obj.start_date = form_data.get("start_date")
-            allocation_obj.description = form_data.get("description")
-            allocation_obj.is_locked = form_data.get("is_locked")
-            allocation_obj.is_changeable = form_data.get("is_changeable")
-            allocation_obj.status = form_data.get("status")
-
-        if "approve" in action:
-            allocation_obj.status = AllocationStatusChoice.objects.get(name="Active")
+        if action in ["approve", "auto-approve"]:
+            dirty_form_data["status"] = AllocationStatusChoice.objects.get(name="Active").pk
         elif action == "deny":
-            allocation_obj.status = AllocationStatusChoice.objects.get(name="Denied")
+            dirty_form_data["status"] = AllocationStatusChoice.objects.get(name="Denied").pk
 
-        if old_status != "Active" == allocation_obj.status.name:
-            if not allocation_obj.start_date:
-                allocation_obj.start_date = datetime.datetime.now()
-            if "approve" in action or not allocation_obj.end_date:
-                allocation_obj.end_date = datetime.datetime.now() + relativedelta(
-                    days=ALLOCATION_DEFAULT_ALLOCATION_LENGTH
-                )
+        old_status = self.object.status.name
+        new_status = AllocationStatusChoice.objects.get(pk=dirty_form_data.get("status")).name
+        status_changed = old_status != new_status
+        allocation_signal = None
+        allocation_user_signal = None
+        allocation_user_qs = None
+        email_kwargs = None
 
-            allocation_obj.save()
+        if not status_changed:
+            return super().post(request, *args, **kwargs)
 
-            allocation_activate.send(sender=self.__class__, allocation_pk=allocation_obj.pk)
-            allocation_users = allocation_obj.allocationuser_set.exclude(
+        if new_status == "Active":
+            now = datetime.datetime.now()
+            if not self.object.start_date:
+                dirty_form_data["start_date"] = now
+            if action in ["approve", "auto-approve"] or not dirty_form_data["end_date"]:
+                dirty_form_data["end_date"] = now + relativedelta(days=ALLOCATION_DEFAULT_ALLOCATION_LENGTH)
+
+            allocation_signal = allocation_activate
+            allocation_users_qs = self.object.allocationuser_set.exclude(
                 status__name__in=["Removed", "Error", "DeclinedEULA", "PendingEULA"]
             )
-            for allocation_user in allocation_users:
-                allocation_activate_user.send(sender=self.__class__, allocation_user_pk=allocation_user.pk)
+            allocation_user_signal = allocation_activate_user
+            email_kwargs = {
+                "subject": "Allocation Activated",
+                "template_name": "email/allocation_activated.txt",
+            }
 
-            send_allocation_customer_email(
-                allocation_obj,
-                "Allocation Activated",
-                "email/allocation_activated.txt",
-                domain_url=get_domain_url(self.request),
-            )
+            # set message
             if action != "auto-approve":
                 messages.success(request, "Allocation Activated!")
-
-        elif old_status != allocation_obj.status.name in ["Denied", "New", "Revoked"]:
-            allocation_obj.start_date = None
-            allocation_obj.end_date = None
-            allocation_obj.save()
-
-            if allocation_obj.status.name in ["Denied", "Revoked"]:
-                allocation_disable.send(sender=self.__class__, allocation_pk=allocation_obj.pk)
-                allocation_users = allocation_obj.allocationuser_set.exclude(status__name__in=["Removed", "Error"])
-                for allocation_user in allocation_users:
-                    allocation_remove_user.send(sender=self.__class__, allocation_user_pk=allocation_user.pk)
-            if allocation_obj.status.name == "Denied":
-                send_allocation_customer_email(
-                    allocation_obj,
-                    "Allocation Denied",
-                    "email/allocation_denied.txt",
-                    domain_url=get_domain_url(self.request),
+            elif action == "auto-approve":
+                messages.success(
+                    request,
+                    "Allocation to {} has been ACTIVATED for {} {} ({})".format(
+                        self.object.get_parent_resource,
+                        self.object.project.pi.first_name,
+                        self.object.project.pi.last_name,
+                        self.object.project.pi.username,
+                    ),
                 )
-                messages.success(request, "Allocation Denied!")
-            elif allocation_obj.status.name == "Revoked":
-                send_allocation_customer_email(
-                    allocation_obj,
-                    "Allocation Revoked",
-                    "email/allocation_revoked.txt",
-                    domain_url=get_domain_url(self.request),
-                )
-                messages.success(request, "Allocation Revoked!")
+        elif new_status in ["Denied", "New", "Revoked"]:
+            dirty_form_data["start_date"] = None
+            dirty_form_data["end_date"] = None
+
+            if new_status in ["Denied", "Revoked"]:
+                allocation_signal = allocation_disable
+                allocation_user_qs = self.object.allocationuser_set.exclude(status__name__in=["Removed", "Error"])
+                allocation_user_signal = allocation_remove_user
+
+                if new_status == "Denied":
+                    email_kwargs = {
+                        "subject": "Allocation Denied",
+                        "template_name": "email/allocation_denied.txt",
+                    }
+                    messages.success(request, "Allocation Denied!")
+                elif new_status == "Revoked":
+                    email_kwargs = {
+                        "subject": "Allocation Revoked",
+                        "template_name": "email/allocation_revoked.txt",
+                    }
+                    messages.success(request, "Allocation Revoked!")
             else:
                 messages.success(request, "Allocation updated!")
+
+        form_kwargs["data"] = dirty_form_data
+        form_class = self.get_form_class()
+        form = form_class(**form_kwargs)
+        if form.is_valid():
+            # save form and perform post-save actions
+            redirect = self.form_valid(form)
+            if allocation_signal:
+                allocation_signal.send(sender=self.__class__, allocation_pk=self.object.pk)
+            if allocation_user_signal and allocation_user_qs:
+                for allocation_user in allocation_user_qs:
+                    allocation_user_signal.send(sender=self.__class__, allocation_user_pk=allocation_user.pk)
+            if email_kwargs:
+                send_allocation_customer_email(
+                    allocation_obj=self.object, domain_url=get_domain_url(self.request), **email_kwargs
+                )
         else:
-            messages.success(request, "Allocation updated!")
-            allocation_obj.save()
+            redirect = self.form_invalid(form)
 
-        if action == "auto-approve":
-            messages.success(
-                request,
-                "Allocation to {} has been ACTIVATED for {} {} ({})".format(
-                    allocation_obj.get_parent_resource,
-                    allocation_obj.project.pi.first_name,
-                    allocation_obj.project.pi.last_name,
-                    allocation_obj.project.pi.username,
-                ),
-            )
-            return HttpResponseRedirect(reverse("allocation-request-list"))
-
-        return HttpResponseRedirect(reverse("allocation-detail", kwargs={"pk": pk}))
+        return redirect
 
 
 class AllocationEULAView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
