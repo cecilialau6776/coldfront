@@ -238,7 +238,7 @@ class AllocationDetailView(LoginRequiredMixin, UserPassesTestMixin, DetailView, 
                 dirty_form_data["end_date"] = now + relativedelta(days=ALLOCATION_DEFAULT_ALLOCATION_LENGTH)
 
             allocation_signal = allocation_activate
-            allocation_users_qs = self.object.allocationuser_set.exclude(
+            allocation_user_qs = self.object.allocationuser_set.exclude(
                 status__name__in=["Removed", "Error", "DeclinedEULA", "PendingEULA"]
             )
             allocation_user_signal = allocation_activate_user
@@ -420,100 +420,76 @@ class AllocationListView(LoginRequiredMixin, ListView):
             order_by = "id"
 
         allocation_search_form = AllocationSearchForm(self.request.GET)
+        allocations = Allocation.objects.prefetch_related("project", "project__pi", "status").order_by(order_by)
 
-        if allocation_search_form.is_valid():
-            data = allocation_search_form.cleaned_data
+        if not allocation_search_form.is_valid():
+            allocations = allocations.filter(
+                Q(allocationuser__user=self.request.user)
+                & Q(allocationuser__status__name__in=["PendingEULA", "Active"])
+            ).distinct()
+            return allocations
 
-            if data.get("show_all_allocations") and (
-                self.request.user.is_superuser or self.request.user.has_perm("allocation.can_view_all_allocations")
-            ):
-                allocations = (
-                    Allocation.objects.prefetch_related(
-                        "project",
-                        "project__pi",
-                        "status",
-                    )
-                    .all()
-                    .order_by(order_by)
-                )
-            else:
-                allocations = (
-                    Allocation.objects.prefetch_related(
-                        "project",
-                        "project__pi",
-                        "status",
-                    )
-                    .filter(
-                        Q(project__status__name__in=["New", "Active"])
-                        & Q(project__projectuser__status__name__in=["Active"])
-                        & Q(project__projectuser__user=self.request.user)
-                        & (
-                            Q(project__projectuser__role__name="Manager")
-                            | Q(allocationuser__user=self.request.user)
-                            & Q(allocationuser__status__name__in=["Active", "PendingEULA"])
-                        )
-                    )
-                    .distinct()
-                    .order_by(order_by)
-                )
+        data = allocation_search_form.cleaned_data
 
-            # Project Title
-            if data.get("project"):
-                allocations = allocations.filter(project__title__icontains=data.get("project"))
-
-            # username
-            if data.get("username"):
-                allocations = allocations.filter(
-                    Q(project__pi__username__icontains=data.get("username"))
-                    | Q(allocationuser__user__username__icontains=data.get("username"))
-                    & Q(allocationuser__status__name__in=["PendingEULA", "Active"])
-                )
-
-            # Resource Type
-            if data.get("resource_type"):
-                allocations = allocations.filter(resources__resource_type=data.get("resource_type"))
-
-            # Resource Name
-            if data.get("resource_name"):
-                allocations = allocations.filter(resources__in=data.get("resource_name"))
-
-            # Allocation Attribute Name
-            if data.get("allocation_attribute_name") and data.get("allocation_attribute_value"):
-                allocations = allocations.filter(
-                    Q(allocationattribute__allocation_attribute_type=data.get("allocation_attribute_name"))
-                    & Q(allocationattribute__value=data.get("allocation_attribute_value"))
-                )
-
-            # End Date
-            if data.get("end_date"):
-                allocations = allocations.filter(end_date__lt=data.get("end_date"), status__name="Active").order_by(
-                    "end_date"
-                )
-
-            # Active from now until date
-            if data.get("active_from_now_until_date"):
-                allocations = allocations.filter(end_date__gte=date.today())
-                allocations = allocations.filter(
-                    end_date__lt=data.get("active_from_now_until_date"), status__name="Active"
-                ).order_by("end_date")
-
-            # Status
-            if data.get("status"):
-                allocations = allocations.filter(status__in=data.get("status"))
-
+        if data.get("show_all_allocations") and (
+            self.request.user.is_superuser or self.request.user.has_perm("allocation.can_view_all_allocations")
+        ):
+            allocations = allocations.all()
         else:
-            allocations = (
-                Allocation.objects.prefetch_related(
-                    "project",
-                    "project__pi",
-                    "status",
+            allocations = allocations.filter(
+                Q(project__status__name__in=["New", "Active"])
+                & Q(project__projectuser__status__name__in=["Active"])
+                & Q(project__projectuser__user=self.request.user)
+                & (
+                    Q(project__projectuser__role__name="Manager")
+                    | Q(allocationuser__user=self.request.user)
+                    & Q(allocationuser__status__name__in=["Active", "PendingEULA"])
                 )
-                .filter(
-                    Q(allocationuser__user=self.request.user)
-                    & Q(allocationuser__status__name__in=["PendingEULA", "Active"])
-                )
-                .order_by(order_by)
             )
+
+        # Project Title
+        if data.get("project"):
+            allocations = allocations.filter(project__title__icontains=data.get("project"))
+
+        # username
+        if data.get("username"):
+            allocations = allocations.filter(
+                Q(project__pi__username__icontains=data.get("username"))
+                | Q(allocationuser__user__username__icontains=data.get("username"))
+                & Q(allocationuser__status__name__in=["PendingEULA", "Active"])
+            )
+
+        # Resource Type
+        if data.get("resource_type"):
+            allocations = allocations.filter(resources__resource_type=data.get("resource_type"))
+
+        # Resource Name
+        if data.get("resource_name"):
+            allocations = allocations.filter(resources__in=data.get("resource_name"))
+
+        # Allocation Attribute Name
+        if data.get("allocation_attribute_name") and data.get("allocation_attribute_value"):
+            allocations = allocations.filter(
+                Q(allocationattribute__allocation_attribute_type=data.get("allocation_attribute_name"))
+                & Q(allocationattribute__value=data.get("allocation_attribute_value"))
+            )
+
+        # End Date
+        if data.get("end_date"):
+            allocations = allocations.filter(end_date__lt=data.get("end_date"), status__name="Active").order_by(
+                "end_date"
+            )
+
+        # Active from now until date
+        if data.get("active_from_now_until_date"):
+            allocations = allocations.filter(end_date__gte=date.today())
+            allocations = allocations.filter(
+                end_date__lt=data.get("active_from_now_until_date"), status__name="Active"
+            ).order_by("end_date")
+
+        # Status
+        if data.get("status"):
+            allocations = allocations.filter(status__in=data.get("status"))
 
         return allocations.distinct()
 
