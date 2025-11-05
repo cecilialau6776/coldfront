@@ -3,16 +3,20 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 from django import forms
+from django.contrib.auth import get_user_model
 from django.db.models.functions import Lower
 from django.forms import ValidationError
 from django.shortcuts import get_object_or_404
 
+from coldfront.config.core import ALLOCATION_EULA_ENABLE
 from coldfront.core.allocation.models import (
     Allocation,
     AllocationAccount,
     AllocationAttribute,
     AllocationAttributeType,
     AllocationStatusChoice,
+    AllocationUser,
+    AllocationUserStatusChoice,
 )
 from coldfront.core.allocation.utils import get_user_resources
 from coldfront.core.project.models import Project
@@ -176,12 +180,64 @@ class AllocationInvoiceUpdateForm(forms.Form):
     )
 
 
-class AllocationAddUserForm(forms.Form):
-    username = forms.CharField(max_length=150, disabled=True)
-    first_name = forms.CharField(max_length=150, required=False, disabled=True)
-    last_name = forms.CharField(max_length=150, required=False, disabled=True)
-    email = forms.EmailField(max_length=100, required=False, disabled=True)
+class AllocationUserForm(forms.ModelForm):
+    class Meta:
+        model = AllocationUser
+        fields = ["id", "allocation", "user", "status"]
+        widgets = {"id": forms.HiddenInput()}
+
+    allocation = forms.ModelChoiceField(
+        empty_label=None, queryset=Allocation.objects.none(), widget=forms.HiddenInput()
+    )
+    user = forms.ModelChoiceField(
+        empty_label=None, queryset=get_user_model().objects.none(), widget=forms.HiddenInput()
+    )
+    status = forms.ModelChoiceField(
+        empty_label=None, queryset=AllocationUserStatusChoice.objects.none(), widget=forms.HiddenInput()
+    )
     selected = forms.BooleanField(initial=False, required=False)
+
+    def __init__(self, *args, **kwargs):
+        # raise Exception(kwargs)
+        super().__init__(*args, **kwargs)
+        initial = kwargs.get("initial")
+        instance = kwargs.get("instance")
+        if instance:
+            user = instance.user
+            allocation = instance.allocation
+            status = instance.status
+        if initial:
+            user = initial.get("user") or user
+            allocation = initial.get("allocation") or allocation
+            status = initial.get("status") or status
+        else:
+            return
+
+        if user:
+            self.fields["user"].queryset = get_user_model().objects.filter(pk=user.pk)
+        if allocation:
+            self.fields["allocation"].queryset = Allocation.objects.filter(pk=allocation.pk)
+        if status:
+            self.fields["status"].queryset = AllocationUserStatusChoice.objects.filter(pk=status.pk)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        user = cleaned_data.get("user")
+        allocation = cleaned_data.get("allocation")
+
+        is_pending_eula = ALLOCATION_EULA_ENABLE and not user.userprofile.is_pi and allocation.get_eula()
+        allocation_user_status_name = "PendingEULA" if is_pending_eula else "Active"
+        allocation_user_status = AllocationUserStatusChoice.objects.get(name=allocation_user_status_name)
+        cleaned_data["status"] = allocation_user_status
+        self.instance.status = cleaned_data["status"]
+
+        return cleaned_data
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        if self.cleaned_data["selected"] and commit:
+            instance.save()
+        return instance
 
 
 class AllocationRemoveUserForm(forms.Form):

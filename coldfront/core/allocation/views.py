@@ -15,18 +15,23 @@ from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db.models import Q
 from django.db.models.query import QuerySet
-from django.forms import formset_factory
+from django.forms import formset_factory, modelformset_factory
 from django.http import HttpResponseBadRequest, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.template.defaultfilters import pluralize
 from django.urls import reverse, reverse_lazy
 from django.views import View
 from django.views.generic import DetailView, ListView, TemplateView
-from django.views.generic.edit import CreateView, FormView, ModelFormMixin, ProcessFormView, UpdateView
+from django.views.generic.edit import (
+    CreateView,
+    FormView,
+    SingleObjectMixin,
+    UpdateView,
+)
 
 from coldfront.config.core import ALLOCATION_EULA_ENABLE
 from coldfront.core.allocation.forms import (
     AllocationAccountForm,
-    AllocationAddUserForm,
     AllocationAttributeChangeForm,
     AllocationAttributeCreateForm,
     AllocationAttributeDeleteForm,
@@ -41,6 +46,7 @@ from coldfront.core.allocation.forms import (
     AllocationReviewUserForm,
     AllocationSearchForm,
     AllocationUpdateForm,
+    AllocationUserForm,
 )
 from coldfront.core.allocation.models import (
     Allocation,
@@ -675,7 +681,7 @@ class AllocationCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateView):
         return reverse("project-detail", kwargs={"pk": self.kwargs.get("project_pk")})
 
 
-class AllocationAddUsersView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
+class AllocationAddUsersView(LoginRequiredMixin, UserPassesTestMixin, SingleObjectMixin, TemplateView):
     template_name = "allocation/allocation_add_users.html"
     model = Allocation
     context_object_name = "allocation"
@@ -709,56 +715,58 @@ class AllocationAddUsersView(LoginRequiredMixin, UserPassesTestMixin, TemplateVi
             return HttpResponseRedirect(reverse("allocation-detail", kwargs={"pk": allocation_obj.pk}))
         return super().dispatch(request, *args, **kwargs)
 
-    def get_users_to_add(self, allocation_obj):
-        active_users_in_project = list(
-            allocation_obj.project.projectuser_set.filter(status__name="Active").values_list(
-                "user__username", flat=True
-            )
+    def get_formset(self):
+        project_user_pks = set(
+            self.object.project.projectuser_set.filter(status__name="Active").values_list("user__pk", flat=True)
         )
-        users_already_in_allocation = list(
-            allocation_obj.allocationuser_set.exclude(status__name__in=["Removed"]).values_list(
-                "user__username", flat=True
-            )
-        )
+        allocation_user_pks = set(self.object.allocationuser_set.values_list("user__pk", flat=True))
+        missing_user_pks = project_user_pks - allocation_user_pks
+        missing_user_pks.discard(self.object.project.pi.pk)
+        missing_users = get_user_model().objects.filter(pk__in=missing_user_pks)
 
-        missing_users = list(set(active_users_in_project) - set(users_already_in_allocation))
-        missing_users = (
-            get_user_model().objects.filter(username__in=missing_users).exclude(pk=allocation_obj.project.pi.pk)
-        )
+        allocation_user_status_name = "PendingEULA" if ALLOCATION_EULA_ENABLE else "Active"
+        allocation_user_status = AllocationUserStatusChoice.objects.get(name=allocation_user_status_name)
 
+        removed_users = self.object.allocationuser_set.filter(status__name__in=["Removed"])
         users_to_add = [
             {
-                "username": user.username,
-                "first_name": user.first_name,
-                "last_name": user.last_name,
-                "email": user.email,
+                "allocation": self.object,
+                "user": user,
+                "status": allocation_user_status,
             }
             for user in missing_users
         ]
+        kwargs = {
+            "initial": users_to_add,
+            "queryset": removed_users,
+            "form_kwargs": {"initial": {"status": allocation_user_status}},
+        }
+        if users_to_add or removed_users:
+            initial_len = len(users_to_add)
+            queryset_len = len(removed_users)
+            total_forms = initial_len + queryset_len
+            AllocationUserFormSet = modelformset_factory(
+                AllocationUser,
+                form=AllocationUserForm,
+                extra=initial_len,
+                max_num=total_forms,
+            )
+            if self.request.method == "POST":
+                kwargs["data"] = self.request.POST
+            formset = AllocationUserFormSet(prefix="userform", **kwargs)
+            return formset
+        return None
 
-        return users_to_add
-
-    def get(self, request, *args, **kwargs):
-        pk = self.kwargs.get("pk")
-        allocation_obj = get_object_or_404(Allocation, pk=pk)
-
-        users_to_add = self.get_users_to_add(allocation_obj)
-        context = {}
-
-        if users_to_add:
-            formset = formset_factory(AllocationAddUserForm, max_num=len(users_to_add))
-            formset = formset(initial=users_to_add, prefix="userform")
-            context["formset"] = formset
-
-        context["allocation"] = allocation_obj
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["formset"] = self.get_formset()
 
         user_resources = get_user_resources(self.request.user)
         resources_with_eula = {}
         for res in user_resources:
-            if res in allocation_obj.get_resources_as_list:
-                if res.get_attribute_list(name="eula"):
-                    for attr_value in res.get_attribute_list(name="eula"):
-                        resources_with_eula[res] = attr_value
+            if res in self.object.get_resources_as_list:
+                for attr_value in res.get_attribute_list(name="eula"):
+                    resources_with_eula[res] = attr_value
 
         context["resources_with_eula"] = resources_with_eula
         string_accumulator = ""
@@ -766,84 +774,46 @@ class AllocationAddUsersView(LoginRequiredMixin, UserPassesTestMixin, TemplateVi
             string_accumulator += f"{res}: {value}\n"
         context["compiled_eula"] = str(string_accumulator)
 
-        return render(request, self.template_name, context)
+        return context
+
+    def get(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        context = self.get_context_data(object=self.object)
+        return self.render_to_response(context)
 
     def post(self, request, *args, **kwargs):
-        pk = self.kwargs.get("pk")
-        allocation_obj = get_object_or_404(Allocation, pk=pk)
+        self.object = self.get_object()
+        formset = self.get_formset()
 
-        users_to_add = self.get_users_to_add(allocation_obj)
-
-        formset = formset_factory(AllocationAddUserForm, max_num=len(users_to_add))
-        formset = formset(request.POST, initial=users_to_add, prefix="userform")
-
-        users_added_count = 0
-
-        if formset.is_valid():
-            allocation_user_active_status_choice = AllocationUserStatusChoice.objects.get(name="Active")
-            if ALLOCATION_EULA_ENABLE:
-                allocation_user_pending_status_choice = AllocationUserStatusChoice.objects.get(name="PendingEULA")
-
-            for form in formset:
-                user_form_data = form.cleaned_data
-                if user_form_data["selected"]:
-                    users_added_count += 1
-
-                    user_obj = get_user_model().objects.get(username=user_form_data.get("username"))
-
-                    if allocation_obj.allocationuser_set.filter(user=user_obj).exists():
-                        allocation_user_obj = allocation_obj.allocationuser_set.get(user=user_obj)
-                        if ALLOCATION_EULA_ENABLE and not user_obj.userprofile.is_pi and allocation_obj.get_eula():
-                            allocation_user_obj.status = allocation_user_pending_status_choice
-                            send_email_template(
-                                f"Agree to EULA for {allocation_obj.get_parent_resource.__str__()}",
-                                "email/allocation_agree_to_eula.txt",
-                                {
-                                    "resource": allocation_obj.get_parent_resource,
-                                    "url": build_link(
-                                        reverse("allocation-review-eula", kwargs={"pk": allocation_obj.pk}),
-                                        domain_url=get_domain_url(self.request),
-                                    ),
-                                },
-                                self.request.user.email,
-                                [user_obj],
-                            )
-                        else:
-                            allocation_user_obj.status = allocation_user_active_status_choice
-                        allocation_user_obj.save()
-                    else:
-                        if ALLOCATION_EULA_ENABLE and not user_obj.userprofile.is_pi and allocation_obj.get_eula():
-                            allocation_user_obj = AllocationUser.objects.create(
-                                allocation=allocation_obj, user=user_obj, status=allocation_user_pending_status_choice
-                            )
-                            send_email_template(
-                                f"Agree to EULA for {allocation_obj.get_parent_resource.__str__()}",
-                                "email/allocation_agree_to_eula.txt",
-                                {
-                                    "resource": allocation_obj.get_parent_resource,
-                                    "url": build_link(
-                                        reverse("allocation-review-eula", kwargs={"pk": allocation_obj.pk}),
-                                        domain_url=get_domain_url(self.request),
-                                    ),
-                                },
-                                self.request.user.email,
-                                [user_obj],
-                            )
-                        else:
-                            allocation_user_obj = AllocationUser.objects.create(
-                                allocation=allocation_obj, user=user_obj, status=allocation_user_active_status_choice
-                            )
-
-                    if allocation_user_obj.status == allocation_user_active_status_choice:
-                        allocation_activate_user.send(sender=self.__class__, allocation_user_pk=allocation_user_obj.pk)
-
-            user_plural = "user" if users_added_count == 1 else "users"
-            messages.success(request, f"Added {users_added_count} {user_plural} to allocation.")
-        else:
+        redirect = HttpResponseRedirect(reverse("allocation-detail", kwargs={"pk": self.object.pk}))
+        if not formset or not formset.is_valid():
             for error in formset.errors:
                 messages.error(request, error)
+            return redirect
 
-        return HttpResponseRedirect(reverse("allocation-detail", kwargs={"pk": pk}))
+        allocation_users = formset.save()
+        for allocation_user in allocation_users:
+            if allocation_user.status.name == "Active":
+                allocation_activate_user.send(sender=self.__class__, allocation_user_pk=allocation_user.pk)
+            elif allocation_user.status.name == "PendingEULA":
+                send_email_template(
+                    f"Agree to EULA for {self.object.get_parent_resource.__str__()}",
+                    "email/allocation_agree_to_eula.txt",
+                    {
+                        "resource": self.object.get_parent_resource,
+                        "url": build_link(
+                            reverse("allocation-review-eula", kwargs={"pk": self.object.pk}),
+                            domain_url=get_domain_url(self.request),
+                        ),
+                    },
+                    self.request.user.email,
+                    [allocation_user.user],
+                )
+
+        users_added_count = len(allocation_users)
+        messages.success(request, f"Added {users_added_count} user{pluralize(users_added_count)} to allocation.")
+
+        return redirect
 
 
 class AllocationRemoveUsersView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):

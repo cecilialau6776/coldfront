@@ -33,14 +33,19 @@ Add Users to Allocation
             </thead>
             <tbody>
               {% for form in formset %}
-                <tr>
-                  <td>{{ form.selected }}</td>
-                  <td>{{ forloop.counter }}</td>
-                  <td>{{ form.username.value }}</td>
-                  <td>{{ form.first_name.value }}</td>
-                  <td>{{ form.last_name.value }}</td>
-                  <td>{{ form.email.value }}</td>
-                </tr>
+                {% with user=form.user.field.queryset|first %}
+                  <tr>
+                    <td>{{ form.selected }}</td>
+                    <td>{{ forloop.counter }}</td>
+                    <td>{{ user.username }}</td>
+                    <td>{{ user.first_name }}</td>
+                    <td>{{ user.last_name }}</td>
+                    <td>{{ user.email }}</td>
+                  </tr>
+                {% endwith %}
+                {% for hidden_field in form.hidden_fields %}
+                  {{hidden_field}}
+                {% endfor %}
               {% endfor %}
             </tbody>
           </table>
