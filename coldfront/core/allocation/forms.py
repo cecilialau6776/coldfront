@@ -2,10 +2,12 @@
 #
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
+from enum import Enum
+
 from django import forms
 from django.contrib.auth import get_user_model
 from django.db.models.functions import Lower
-from django.forms import ValidationError
+from django.forms import BaseModelFormSet, ValidationError
 from django.shortcuts import get_object_or_404
 
 from coldfront.config.core import ALLOCATION_EULA_ENABLE
@@ -198,7 +200,6 @@ class AllocationUserForm(forms.ModelForm):
     selected = forms.BooleanField(initial=False, required=False)
 
     def __init__(self, *args, **kwargs):
-        # raise Exception(kwargs)
         super().__init__(*args, **kwargs)
         initial = kwargs.get("initial")
         instance = kwargs.get("instance")
@@ -220,19 +221,6 @@ class AllocationUserForm(forms.ModelForm):
         if status:
             self.fields["status"].queryset = AllocationUserStatusChoice.objects.filter(pk=status.pk)
 
-    def clean(self):
-        cleaned_data = super().clean()
-        user = cleaned_data.get("user")
-        allocation = cleaned_data.get("allocation")
-
-        is_pending_eula = ALLOCATION_EULA_ENABLE and not user.userprofile.is_pi and allocation.get_eula()
-        allocation_user_status_name = "PendingEULA" if is_pending_eula else "Active"
-        allocation_user_status = AllocationUserStatusChoice.objects.get(name=allocation_user_status_name)
-        cleaned_data["status"] = allocation_user_status
-        self.instance.status = cleaned_data["status"]
-
-        return cleaned_data
-
     def save(self, commit=True):
         instance = super().save(commit=False)
         if self.cleaned_data["selected"] and commit:
@@ -240,12 +228,45 @@ class AllocationUserForm(forms.ModelForm):
         return instance
 
 
-class AllocationRemoveUserForm(forms.Form):
-    username = forms.CharField(max_length=150, disabled=True)
-    first_name = forms.CharField(max_length=150, required=False, disabled=True)
-    last_name = forms.CharField(max_length=150, required=False, disabled=True)
-    email = forms.EmailField(max_length=100, required=False, disabled=True)
-    selected = forms.BooleanField(initial=False, required=False)
+class BaseAllocationUserFormSet(BaseModelFormSet):
+    template_name = "allocation/forms/formsets/allocation_user_formset.html"
+
+    class Action(Enum):
+        ADD = 1
+        REMOVE = 2
+
+    def __init__(self, action: Action, *args, **kwargs):
+        self.action = action
+        super().__init__(*args, **kwargs)
+
+    def clean(self):
+        """Checks that no two articles have the same title."""
+        if any(self.errors):
+            raise Exception(self.errors)
+            return
+        expected_allocation_user_status = self.form_kwargs["initial"]["status"]
+
+        for form in self.forms:
+            status = form.cleaned_data.get("status")
+            if not form.cleaned_data.get("selected"):
+                continue
+            if status != expected_allocation_user_status:
+                raise Exception(form.cleaned_data)
+                raise ValidationError(
+                    f"Submitted form should have {expected_allocation_user_status} AllocationUserStatus, instead got {status}"
+                )
+            user = form.cleaned_data.get("user")
+            allocation = form.cleaned_data.get("allocation")
+
+            if self.action == self.Action.ADD:
+                user_is_pending_eula = ALLOCATION_EULA_ENABLE and not user.userprofile.is_pi and allocation.get_eula()
+                if user_is_pending_eula:
+                    allocation_user_status = AllocationUserStatusChoice.objects.get(name="PendingEULA")
+                    form.cleaned_data["status"] = allocation_user_status
+                    form.instance.status = form.cleaned_data["status"]
+            elif self.action == self.Action.REMOVE:
+                if allocation.project.pi == user:
+                    raise ValidationError("Cannot remove the project PI from an allocation.")
 
 
 class AllocationAttributeDeleteForm(forms.Form):
