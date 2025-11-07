@@ -269,17 +269,6 @@ class BaseAllocationUserFormSet(BaseModelFormSet):
                     raise ValidationError("Cannot remove the project PI from an allocation.")
 
 
-class AllocationAttributeDeleteForm(forms.Form):
-    pk = forms.IntegerField(required=False, disabled=True)
-    name = forms.CharField(max_length=150, required=False, disabled=True)
-    value = forms.CharField(max_length=150, required=False, disabled=True)
-    selected = forms.BooleanField(initial=False, required=False)
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["pk"].widget = forms.HiddenInput()
-
-
 class AllocationSearchForm(forms.Form):
     project = forms.CharField(label="Project Title", max_length=100, required=False)
     username = forms.CharField(label="Username", max_length=100, required=False)
@@ -432,13 +421,16 @@ class AllocationChangeNoteForm(forms.Form):
     )
 
 
-class AllocationAttributeCreateForm(forms.ModelForm):
+class AllocationAttributeForm(forms.ModelForm):
     class Meta:
         model = AllocationAttribute
-        fields = "__all__"
+        fields = ["allocation_attribute_type", "allocation", "value"]
+        widgets = {"allocation": forms.HiddenInput()}
 
-    def __init__(self, *args, **kwargs):
-        super(AllocationAttributeCreateForm, self).__init__(*args, **kwargs)
+    def __init__(self, disabled_fields=["allocation"], *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.fields["allocation_attribute_type"].queryset = self.fields["allocation_attribute_type"].queryset.order_by(
             Lower("name")
         )
+        for field in disabled_fields:
+            self.fields[field].disabled = True
