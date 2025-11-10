@@ -15,7 +15,9 @@ from coldfront.core.allocation.models import (
     Allocation,
     AllocationAccount,
     AllocationAttribute,
+    AllocationAttributeChangeRequest,
     AllocationAttributeType,
+    AllocationChangeRequest,
     AllocationStatusChoice,
     AllocationUser,
     AllocationUserStatusChoice,
@@ -185,8 +187,7 @@ class AllocationInvoiceUpdateForm(forms.Form):
 class AllocationUserForm(forms.ModelForm):
     class Meta:
         model = AllocationUser
-        fields = ["id", "allocation", "user", "status"]
-        widgets = {"id": forms.HiddenInput()}
+        fields = ["allocation", "user", "status"]
 
     allocation = forms.ModelChoiceField(
         empty_label=None, queryset=Allocation.objects.none(), widget=forms.HiddenInput()
@@ -298,18 +299,37 @@ class AllocationSearchForm(forms.Form):
     show_all_allocations = forms.BooleanField(initial=False, required=False)
 
 
-class AllocationReviewUserForm(forms.Form):
+class AllocationReviewUserForm(forms.ModelForm):
+    class Meta:
+        model = AllocationUser
+        fields = ["allocation", "user", "status"]
+        widgets = {"allocation": forms.HiddenInput()}
+
     ALLOCATION_REVIEW_USER_CHOICES = (
         ("keep_in_allocation_and_project", "Keep in allocation and project"),
         ("keep_in_project_only", "Remove from this allocation only"),
         ("remove_from_project", "Remove from project"),
     )
 
-    username = forms.CharField(max_length=150, disabled=True)
-    first_name = forms.CharField(max_length=150, required=False, disabled=True)
-    last_name = forms.CharField(max_length=150, required=False, disabled=True)
-    email = forms.EmailField(max_length=100, required=False, disabled=True)
     user_status = forms.ChoiceField(choices=ALLOCATION_REVIEW_USER_CHOICES)
+
+    def __init__(self, disabled_fields=["allocation"], *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in disabled_fields:
+            self.fields[field].disabled = True
+
+    def save(self, commit=True):
+        # Not calling super().save() here - We need to do more than update
+        # the AllocationUser, so it will be less confusing to change the
+        # status of the AllocationUser/ProjectUser here.
+        cleaned_data = self.cleaned_data
+        user_status = cleaned_data.get("user_status")
+        allocation = cleaned_data.get("allocation")
+        user = cleaned_data.get("user")
+        if user_status == "keep_in_project_only":
+            allocation.remove_user(user, signal_sender=self.__class__)
+        elif user_status == "remove_from_project":
+            allocation.project.remove_user(user, signal_sender=self.__class__)
 
 
 class AllocationInvoiceNoteDeleteForm(forms.Form):
@@ -407,8 +427,46 @@ class AllocationChangeForm(forms.Form):
         help_text="Justification for requesting this allocation change request.",
     )
 
-    def __init__(self, *args, **kwargs):
+
+class AllocationChangeRequestForm(forms.ModelForm):
+    class Meta:
+        model = AllocationChangeRequest
+        fields = [
+            "allocation",
+            "status",
+            "end_date_extension",
+            "justification",
+            "notes",
+        ]
+        widgets = {
+            "allocation": forms.HiddenInput(),
+            "status": forms.HiddenInput(),
+        }
+        labels = {"justification": "Justification for Changes"}
+        help_texts = {"justification": "Justification for requesting this allocation change request."}
+
+    EXTENSION_CHOICES = [(0, "No Extension")]
+    for choice in ALLOCATION_CHANGE_REQUEST_EXTENSION_DAYS:
+        EXTENSION_CHOICES.append((choice, "{} days".format(choice)))
+
+    end_date_extension = forms.TypedChoiceField(
+        label="Request End Date Extension",
+        choices=EXTENSION_CHOICES,
+        coerce=int,
+        required=False,
+        empty_value=0,
+    )
+
+    def __init__(self, disabled_fields=["allocation"], *args, **kwargs):
         super().__init__(*args, **kwargs)
+        for field in disabled_fields:
+            self.fields[field].disabled = True
+
+    def has_changed(self):
+        # We con't care if "justification" has been changed.
+        changed_data = set(self.changed_data)
+        changed_data.discard("justification")
+        return bool(changed_data)
 
 
 class AllocationChangeNoteForm(forms.Form):
@@ -419,6 +477,18 @@ class AllocationChangeNoteForm(forms.Form):
         widget=forms.Textarea,
         help_text="Leave any feedback about the allocation change request.",
     )
+
+
+class AllocationAttributeChangeRequestForm(forms.ModelForm):
+    class Meta:
+        model = AllocationAttributeChangeRequest
+        fields = ["allocation_change_request", "allocation_attribute", "new_value"]
+        widgets = {
+            "allocation_change_request": forms.HiddenInput(),
+            "allocation_attribute": forms.HiddenInput(),
+        }
+
+    allocation_change_request = forms.ModelChoiceField(queryset=None, required=False)
 
 
 class AllocationAttributeForm(forms.ModelForm):

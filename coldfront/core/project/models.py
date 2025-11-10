@@ -5,6 +5,7 @@
 import datetime
 from enum import Enum
 
+from django.contrib.auth import get_user_model
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.validators import MinLengthValidator
@@ -242,6 +243,30 @@ We do not have information about your research. Please provide a detailed descri
 
     def natural_key(self):
         return (self.title,) + self.pi.natural_key()
+
+    def remove_user(self, user, signal_sender=None):
+        if isinstance(user, ProjectUser):
+            project_user = user
+        elif isinstance(user, get_user_model()):
+            project_user = self.projectuser_set.get(user=user)
+
+        for active_allocation in self.allocation_set.filter(
+            status__name__in=(
+                "Active",
+                "Denied",
+                "New",
+                "Paid",
+                "Payment Pending",
+                "Payment Requested",
+                "Payment Declined",
+                "Renewal Requested",
+                "Unpaid",
+            )
+        ):
+            active_allocation.remove_user(project_user.user, signal_sender)
+
+        project_user.status = ProjectUserStatusChoice.objects.get(name="Removed")
+        project_user.save()
 
 
 class ProjectAdminComment(TimeStampedModel):

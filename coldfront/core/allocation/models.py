@@ -7,6 +7,7 @@ import logging
 from ast import literal_eval
 from enum import Enum
 
+from django.contrib.auth import get_user_model
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -17,6 +18,7 @@ from model_utils.models import TimeStampedModel
 from simple_history.models import HistoricalRecords
 
 import coldfront.core.attribute_expansion as attribute_expansion
+from coldfront.core.allocation.signals import allocation_remove_user
 from coldfront.core.project.models import Project, ProjectPermission
 from coldfront.core.resource.models import Resource
 from coldfront.core.utils.common import import_from_settings
@@ -352,6 +354,18 @@ class Allocation(TimeStampedModel):
                     return res.get_attribute(name="eula")
         else:
             return None
+
+    def remove_user(self, user, signal_sender=None):
+        if isinstance(user, AllocationUser):
+            allocation_user = user
+        elif isinstance(user, get_user_model()):
+            try:
+                allocation_user = self.allocationuser_set.get(user=user)
+            except AllocationUser.DoesNotExist:
+                return
+        allocation_user.status = AllocationUserStatusChoice.objects.get(name="Removed")
+        allocation_user.save()
+        allocation_remove_user.send(sender=signal_sender, allocation_user_pk=allocation_user.pk)
 
 
 class AllocationAdminNote(TimeStampedModel):
