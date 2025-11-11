@@ -76,6 +76,7 @@ from coldfront.core.allocation.utils import generate_guauge_data_from_usage, get
 from coldfront.core.project.models import Project, ProjectPermission
 from coldfront.core.resource.models import Resource
 from coldfront.core.utils.common import get_domain_url, import_from_settings
+from coldfront.core.utils.views import FormSetView
 from coldfront.core.utils.mail import (
     build_link,
     send_allocation_admin_email,
@@ -1891,9 +1892,12 @@ class AllocationChangeView(LoginRequiredMixin, UserPassesTestMixin, BaseDetailVi
         return HttpResponseRedirect(reverse("allocation-detail", kwargs={"pk": self.object.pk}))
 
 
-class AllocationAttributeEditView(LoginRequiredMixin, UserPassesTestMixin, FormView):
-    formset_class = AllocationAttributeEditForm
+class AllocationAttributeEditView(LoginRequiredMixin, UserPassesTestMixin, BaseDetailView, FormSetView):
+    model = Allocation
+    formset_form_class = AllocationAttributeEditForm
     template_name = "allocation/allocation_attribute_edit.html"
+    formset_prefix = "attributeform"
+    context_object_name = "allocation"
 
     def test_func(self):
         """UserPassesTestMixin Tests"""
@@ -1920,28 +1924,28 @@ class AllocationAttributeEditView(LoginRequiredMixin, UserPassesTestMixin, FormV
 
         return attributes_to_change
 
+    def get_formset_initial(self):
+        return self.get_allocation_attributes_to_change(self.object)
+
+    def get_formset_factory_kwargs(self):
+        kwargs = super().get_formset_factory_kwargs()
+        kwargs["max_num"] = len(self.get_allocation_attributes_to_change(self.object))
+        return kwargs
+
     def get(self, request, *args, **kwargs):
-        context = {}
+        self.object = self.get_object()
+        context = self.get_context_data()
         allocation_obj = get_object_or_404(Allocation, pk=self.kwargs.get("pk"))
         allocation_attributes_to_change = self.get_allocation_attributes_to_change(allocation_obj)
-        context["allocation"] = allocation_obj
 
         if not allocation_attributes_to_change:
             return render(request, self.template_name, context)
 
-        AllocAttrChangeFormsetFactory = formset_factory(
-            self.formset_class,
-            max_num=len(allocation_attributes_to_change),
-        )
-        formset = AllocAttrChangeFormsetFactory(
-            initial=allocation_attributes_to_change,
-            prefix="attributeform",
-        )
-        context["formset"] = formset
         context["attributes"] = allocation_attributes_to_change
         return render(request, self.template_name, context)
 
     def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
         attribute_changes_to_make = set()
 
         pk = self.kwargs.get("pk")
@@ -1952,15 +1956,7 @@ class AllocationAttributeEditView(LoginRequiredMixin, UserPassesTestMixin, FormV
         if not allocation_attributes_to_change:
             return ok_redirect
 
-        AllocAttrChangeFormsetFactory = formset_factory(
-            self.formset_class,
-            max_num=len(allocation_attributes_to_change),
-        )
-        formset = AllocAttrChangeFormsetFactory(
-            request.POST,
-            initial=allocation_attributes_to_change,
-            prefix="attributeform",
-        )
+        formset = self.get_formset()
         if not formset.is_valid():
             attribute_errors = ""
             for error in formset.errors:
