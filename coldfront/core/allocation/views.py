@@ -1704,8 +1704,10 @@ class AllocationChangeDetailView(LoginRequiredMixin, UserPassesTestMixin, Update
         return redirect
 
 
-class AllocationChangeListView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
+class AllocationChangeListView(LoginRequiredMixin, UserPassesTestMixin, ListView):
+    model = AllocationChangeRequest
     template_name = "allocation/allocation_change_list.html"
+    context_object_name = "allocation_change_list"
 
     def test_func(self):
         """UserPassesTestMixin Tests"""
@@ -1720,15 +1722,9 @@ class AllocationChangeListView(LoginRequiredMixin, UserPassesTestMixin, Template
 
         return False
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        allocation_change_list = AllocationChangeRequest.objects.filter(
-            status__name__in=[
-                "Pending",
-            ]
-        )
-        context["allocation_change_list"] = allocation_change_list
-        return context
+    def get_queryset(self):
+        allocation_change_list = AllocationChangeRequest.objects.filter(status__name__in=["Pending"])
+        return allocation_change_list
 
 
 class AllocationChangeView(LoginRequiredMixin, UserPassesTestMixin, BaseDetailView, FormView):
