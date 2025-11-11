@@ -2,21 +2,21 @@
 #
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-# Create your views here.
-
 from django.core.exceptions import ImproperlyConfigured
+from django.db.models import QuerySet
 from django.forms import formset_factory, modelformset_factory
 from django.http import HttpResponseRedirect
 from django.views.generic.base import ContextMixin, TemplateResponseMixin, View
+from django.views.generic.list import MultipleObjectMixin
 
 
 class FormSetMixin(ContextMixin):
     """Provide a way to show and handle a form in a request."""
 
-    initial = {}
+    initial = []
     formset_form_class = None
     success_url = None
-    prefix = None
+    formset_prefix = None
 
     def get_formset_initial(self):
         """Return the initial data to use for forms on this view."""
@@ -24,23 +24,21 @@ class FormSetMixin(ContextMixin):
 
     def get_formset_prefix(self):
         """Return the prefix to use for forms."""
-        return self.prefix
+        return self.formset_prefix
 
-    def get_formset_class(self):
+    def get_formset_form_class(self):
         """Return the form class to use when instantiating the formset factory."""
         return self.formset_form_class
 
-    def get_formset(self, formset_class=None):
+    def get_formset(self):
         """Return an instance of the formset to be used in this view."""
-        if formset_class is None:
-            formset_class = self.get_formset_class()
         FormSetFactory = formset_factory(**self.get_formset_factory_kwargs())
         return FormSetFactory(**self.get_formset_kwargs())
 
     def get_formset_factory_kwargs(self):
         """Return the keyword arguments for instantiating the formset factory."""
         kwargs = {
-            "form": self.get_formset_class(),
+            "form": self.get_formset_form_class(),
         }
         return kwargs
 
@@ -78,6 +76,54 @@ class FormSetMixin(ContextMixin):
         if "formset" not in kwargs:
             kwargs["formset"] = self.get_formset()
         return super().get_context_data(**kwargs)
+
+
+class ModelFormSetMixin(FormSetMixin):
+    """Provide a way to show and handle a ModelFormSet in a request."""
+
+    model = None
+    fields = None
+
+    def get_formset_queryset(self):
+        """
+        Return the list of items for this modelformset.
+
+        The return value must be an iterable and may be an instance of
+        `QuerySet` in which case `QuerySet` specific behavior will be enabled.
+        """
+        if self.queryset is not None:
+            queryset = self.queryset
+            if isinstance(queryset, QuerySet):
+                queryset = queryset.all()
+        elif self.model is not None:
+            queryset = self.model._default_manager.all()
+        else:
+            raise ImproperlyConfigured(
+                "%(cls)s is missing a QuerySet. Define "
+                "%(cls)s.model, %(cls)s.queryset, or override "
+                "%(cls)s.get_queryset()." % {"cls": self.__class__.__name__}
+            )
+
+    def get_formset(self):
+        """Return an instance of the formset to be used in this view."""
+        ModelFormSetFactory = modelformset_factory(**self.get_formset_factory_kwargs())
+        return ModelFormSetFactory(**self.get_formset_kwargs())
+
+    def get_formset_factory_kwargs(self):
+        kwargs = super().get_formset_factory_kwargs()
+        kwargs["model"] = self.model
+        return kwargs
+
+    def get_formset_kwargs(self):
+        """Return the keyword arguments for instantiating the formset."""
+        kwargs = super().get_formset_kwargs()
+        kwargs.update({"queryset": self.get_formset_queryset()})
+        return kwargs
+
+    def formset_valid(self, formset):
+        """If the formset is valid, save the associated formset."""
+        self.objects = formset.save()
+        return super().form_valid(formset)
 
 
 class ProcessFormSetView(View):
