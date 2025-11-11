@@ -76,7 +76,7 @@ from coldfront.core.allocation.utils import generate_guauge_data_from_usage, get
 from coldfront.core.project.models import Project, ProjectPermission
 from coldfront.core.resource.models import Resource
 from coldfront.core.utils.common import get_domain_url, import_from_settings
-from coldfront.core.utils.views import FormSetView
+from coldfront.core.utils.views import FormSetView, ModelFormSetMixin
 from coldfront.core.utils.mail import (
     build_link,
     send_allocation_admin_email,
@@ -682,9 +682,11 @@ class AllocationCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateView):
         return reverse("project-detail", kwargs={"pk": self.kwargs.get("project_pk")})
 
 
-class AllocationAddUsersView(LoginRequiredMixin, UserPassesTestMixin, BaseDetailView, TemplateView):
-    template_name = "allocation/allocation_add_users.html"
+class AllocationAddUsersView(LoginRequiredMixin, UserPassesTestMixin, BaseDetailView, ModelFormSetMixin, TemplateView):
     model = Allocation
+    formset_form_class = AllocationUserForm
+    template_name = "allocation/allocation_add_users.html"
+    formset_prefix = "userform"
     context_object_name = "allocation"
 
     def test_func(self):
@@ -716,7 +718,10 @@ class AllocationAddUsersView(LoginRequiredMixin, UserPassesTestMixin, BaseDetail
             return HttpResponseRedirect(reverse("allocation-detail", kwargs={"pk": allocation_obj.pk}))
         return super().dispatch(request, *args, **kwargs)
 
-    def get_formset(self, **kwargs):
+    def get_formset_queryset(self):
+        return self.object.allocationuser_set.filter(status__name__in=["Removed"])
+
+    def get_formset_initial(self):
         project_user_pks = set(
             self.object.project.projectuser_set.filter(status__name="Active").values_list("user__pk", flat=True)
         )
@@ -737,33 +742,38 @@ class AllocationAddUsersView(LoginRequiredMixin, UserPassesTestMixin, BaseDetail
             }
             for user in missing_users
         ]
-        formset_kwargs = {
-            "action": BaseAllocationUserFormSet.Action.ADD,
-            "prefix": "userform",
-            "initial": users_to_add,
-            "queryset": removed_users,
-            "form_kwargs": {"initial": {"status": allocation_user_status}},
-        }
-        formset_kwargs.update(kwargs)
+        return users_to_add
 
-        if users_to_add or removed_users:
-            initial_len = len(users_to_add)
-            queryset_len = len(removed_users)
-            total_forms = initial_len + queryset_len
-            AllocationUserFormSet = modelformset_factory(
-                AllocationUser,
-                form=AllocationUserForm,
-                formset=BaseAllocationUserFormSet,
-                extra=initial_len,
-                max_num=total_forms,
-            )
-            formset = AllocationUserFormSet(**formset_kwargs)
-            return formset
-        return None
+    def get_formset_kwargs(self):
+        kwargs = super().get_formset_kwargs()
+        allocation_user_status_name = "PendingEULA" if ALLOCATION_EULA_ENABLE else "Active"
+        allocation_user_status = AllocationUserStatusChoice.objects.get(name=allocation_user_status_name)
+        kwargs.update(
+            {
+                "action": BaseAllocationUserFormSet.Action.ADD,
+                "form_kwargs": {"initial": {"status": allocation_user_status}},
+            }
+        )
+        return kwargs
+
+    def get_formset_factory_kwargs(self):
+        kwargs = super().get_formset_factory_kwargs()
+        removed_users = self.object.allocationuser_set.filter(status__name__in=["Removed"])
+        initial_len = len(self.get_formset_initial())
+        queryset_len = len(removed_users)
+        total_forms = initial_len + queryset_len
+        kwargs.update(
+            {
+                "model": AllocationUser,
+                "formset": BaseAllocationUserFormSet,
+                "extra": initial_len,
+                "max_num": total_forms,
+            }
+        )
+        return kwargs
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["formset"] = self.get_formset()
 
         user_resources = get_user_resources(self.request.user)
         resources_with_eula = {}
@@ -782,7 +792,7 @@ class AllocationAddUsersView(LoginRequiredMixin, UserPassesTestMixin, BaseDetail
 
     def post(self, request, *args, **kwargs):
         self.object = self.get_object()
-        formset = self.get_formset(data=request.POST)
+        formset = self.get_formset()
 
         redirect = HttpResponseRedirect(reverse("allocation-detail", kwargs={"pk": self.object.pk}))
         if not formset or not formset.is_valid() or formset.non_form_errors():

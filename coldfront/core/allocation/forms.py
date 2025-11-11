@@ -188,45 +188,13 @@ class AllocationUserForm(forms.ModelForm):
     class Meta:
         model = AllocationUser
         fields = ["allocation", "user", "status"]
+        widgets = {
+            "allocation": forms.HiddenInput(),
+            "user": forms.HiddenInput(),
+            "status": forms.HiddenInput(),
+        }
 
-    allocation = forms.ModelChoiceField(
-        empty_label=None, queryset=Allocation.objects.none(), widget=forms.HiddenInput()
-    )
-    user = forms.ModelChoiceField(
-        empty_label=None, queryset=get_user_model().objects.none(), widget=forms.HiddenInput()
-    )
-    status = forms.ModelChoiceField(
-        empty_label=None, queryset=AllocationUserStatusChoice.objects.none(), widget=forms.HiddenInput()
-    )
     selected = forms.BooleanField(initial=False, required=False)
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        initial = kwargs.get("initial")
-        instance = kwargs.get("instance")
-        if instance:
-            user = instance.user
-            allocation = instance.allocation
-            status = instance.status
-        if initial:
-            user = initial.get("user") or user
-            allocation = initial.get("allocation") or allocation
-            status = initial.get("status") or status
-        else:
-            return
-
-        if user:
-            self.fields["user"].queryset = get_user_model().objects.filter(pk=user.pk)
-        if allocation:
-            self.fields["allocation"].queryset = Allocation.objects.filter(pk=allocation.pk)
-        if status:
-            self.fields["status"].queryset = AllocationUserStatusChoice.objects.filter(pk=status.pk)
-
-    def save(self, commit=True):
-        instance = super().save(commit=False)
-        if self.cleaned_data["selected"] and commit:
-            instance.save()
-        return instance
 
 
 class BaseAllocationUserFormSet(BaseModelFormSet):
@@ -241,9 +209,7 @@ class BaseAllocationUserFormSet(BaseModelFormSet):
         super().__init__(*args, **kwargs)
 
     def clean(self):
-        """Checks that no two articles have the same title."""
         if any(self.errors):
-            raise Exception(self.errors)
             return
         expected_allocation_user_status = self.form_kwargs["initial"]["status"]
 
@@ -251,8 +217,8 @@ class BaseAllocationUserFormSet(BaseModelFormSet):
             status = form.cleaned_data.get("status")
             if not form.cleaned_data.get("selected"):
                 continue
+
             if status != expected_allocation_user_status:
-                raise Exception(form.cleaned_data)
                 raise ValidationError(
                     f"Submitted form should have {expected_allocation_user_status} AllocationUserStatus, instead got {status}"
                 )

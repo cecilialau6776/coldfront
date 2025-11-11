@@ -15,15 +15,15 @@
     </thead>
     <tbody>
       {% for form in formset %}
-        {% with user=form.user.field.queryset|first %}
-          <tr>
-            <td>{{ form.selected }}</td>
-            <td>{{ forloop.counter }}</td>
-            <td>{{ user.username }}</td>
-            <td>{{ user.first_name }}</td>
-            <td>{{ user.last_name }}</td>
-            <td>{{ user.email }}</td>
-          </tr>
+        {% with instance_user=form.instance.user initial_user=form.initial.user %}
+        <tr>
+          <td>{{ form.selected }}</td>
+          <td>{{ forloop.counter }}</td>
+          <td>{% firstof instance_user.username initial_user.username %}</td>
+          <td>{% firstof instance_user.first_name initial_user.first_name %}</td>
+          <td>{% firstof instance_user.last_name initial_user.last_name %}</td>
+          <td>{% firstof instance_user.email initial_user.email %}</td>
+        </tr>
         {% endwith %}
         {% for hidden_field in form.hidden_fields %}
           {{hidden_field}}
