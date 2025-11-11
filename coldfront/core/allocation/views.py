@@ -76,7 +76,7 @@ from coldfront.core.allocation.utils import generate_guauge_data_from_usage, get
 from coldfront.core.project.models import Project, ProjectPermission
 from coldfront.core.resource.models import Resource
 from coldfront.core.utils.common import get_domain_url, import_from_settings
-from coldfront.core.utils.views import FormSetView, ModelFormSetMixin
+from coldfront.core.utils.views import FormSetView, ModelFormSetMixin, ModelFormSetView
 from coldfront.core.utils.mail import (
     build_link,
     send_allocation_admin_email,
@@ -682,7 +682,7 @@ class AllocationCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateView):
         return reverse("project-detail", kwargs={"pk": self.kwargs.get("project_pk")})
 
 
-class AllocationAddUsersView(LoginRequiredMixin, UserPassesTestMixin, BaseDetailView, ModelFormSetMixin, TemplateView):
+class AllocationAddUsersView(LoginRequiredMixin, UserPassesTestMixin, BaseDetailView, ModelFormSetView, TemplateView):
     model = Allocation
     formset_form_class = AllocationUserForm
     template_name = "allocation/allocation_add_users.html"
@@ -717,6 +717,9 @@ class AllocationAddUsersView(LoginRequiredMixin, UserPassesTestMixin, BaseDetail
             messages.error(request, message)
             return HttpResponseRedirect(reverse("allocation-detail", kwargs={"pk": allocation_obj.pk}))
         return super().dispatch(request, *args, **kwargs)
+
+    def get_success_url(self):
+        return reverse("allocation-detail", kwargs={"pk": self.object.pk})
 
     def get_formset_queryset(self):
         return self.object.allocationuser_set.filter(status__name__in=["Removed"])
@@ -790,18 +793,7 @@ class AllocationAddUsersView(LoginRequiredMixin, UserPassesTestMixin, BaseDetail
 
         return context
 
-    def post(self, request, *args, **kwargs):
-        self.object = self.get_object()
-        formset = self.get_formset()
-
-        redirect = HttpResponseRedirect(reverse("allocation-detail", kwargs={"pk": self.object.pk}))
-        if not formset or not formset.is_valid() or formset.non_form_errors():
-            if formset.non_form_errors():
-                messages.error(request, formset.non_form_errors())
-            for error in formset.errors:
-                messages.error(request, error)
-            return redirect
-
+    def formset_valid(self, formset):
         allocation_users = formset.save()
         for allocation_user in allocation_users:
             if allocation_user.status.name == "Active":
@@ -822,14 +814,21 @@ class AllocationAddUsersView(LoginRequiredMixin, UserPassesTestMixin, BaseDetail
                 )
 
         users_added_count = len(allocation_users)
-        messages.success(request, f"Added {users_added_count} user{pluralize(users_added_count)} to allocation.")
+        messages.success(self.request, f"Added {users_added_count} user{pluralize(users_added_count)} to allocation.")
+        return super().formset_valid(formset)
 
-        return redirect
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        return super().post(request, *args, **kwargs)
 
 
-class AllocationRemoveUsersView(LoginRequiredMixin, UserPassesTestMixin, BaseDetailView, TemplateView):
-    template_name = "allocation/allocation_remove_users.html"
+class AllocationRemoveUsersView(
+    LoginRequiredMixin, UserPassesTestMixin, BaseDetailView, ModelFormSetView, TemplateView
+):
     model = Allocation
+    formset_form_class = AllocationUserForm
+    template_name = "allocation/allocation_remove_users.html"
+    formset_prefix = "userform"
     context_object_name = "allocation"
 
     def test_func(self):
@@ -858,50 +857,46 @@ class AllocationRemoveUsersView(LoginRequiredMixin, UserPassesTestMixin, BaseDet
             return HttpResponseRedirect(reverse("allocation-detail", kwargs={"pk": allocation_obj.pk}))
         return super().dispatch(request, *args, **kwargs)
 
-    def get_formset(self, **kwargs):
-        allocation_user_removed_status = AllocationUserStatusChoice.objects.get(name="Removed")
+    def get_success_url(self):
+        return reverse("allocation-detail", kwargs={"pk": self.object.pk})
+
+    def get_formset_queryset(self):
         queryset = (
             self.object.allocationuser_set.exclude(status__name__in=["Removed", "Error"])
             .exclude(user=self.object.project.pi)
             .exclude(user=self.request.user)
         )
-        formset_kwargs = {
-            "action": BaseAllocationUserFormSet.Action.REMOVE,
-            "prefix": "userform",
-            "queryset": queryset,
-            "form_kwargs": {"initial": {"status": allocation_user_removed_status}},
-        }
-        formset_kwargs.update(kwargs)
+        return queryset
 
-        if queryset:
-            AllocationUserFormSet = modelformset_factory(
-                AllocationUser,
-                form=AllocationUserForm,
-                formset=BaseAllocationUserFormSet,
-                extra=0,
-                max_num=len(queryset),
-            )
-            formset = AllocationUserFormSet(**formset_kwargs)
-            return formset
-        return None
+    def get_formset_factory_kwargs(self):
+        kwargs = super().get_formset_factory_kwargs()
+        kwargs.update(
+            {
+                "model": AllocationUser,
+                "formset": BaseAllocationUserFormSet,
+                "extra": 0,
+                "max_num": len(self.get_formset_queryset()),
+            }
+        )
+        return kwargs
+
+    def get_formset_kwargs(self):
+        kwargs = super().get_formset_kwargs()
+        allocation_user_removed_status = AllocationUserStatusChoice.objects.get(name="Removed")
+        kwargs.update(
+            {
+                "action": BaseAllocationUserFormSet.Action.REMOVE,
+                "form_kwargs": {"initial": {"status": allocation_user_removed_status}},
+            }
+        )
+        return kwargs
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["formset"] = self.get_formset()
         return context
 
-    def post(self, request, *args, **kwargs):
-        self.object = self.get_object()
-        formset = self.get_formset(data=request.POST)
-
-        redirect = HttpResponseRedirect(reverse("allocation-detail", kwargs={"pk": self.object.pk}))
-        if not formset or not formset.is_valid() or formset.non_form_errors():
-            if formset.non_form_errors():
-                messages.error(request, formset.non_form_errors())
-            for error in formset.errors:
-                messages.error(request, error)
-            return redirect
-
+    def formset_valid(self, formset):
         allocation_users = formset.save()
 
         for allocation_user in allocation_users:
@@ -909,10 +904,13 @@ class AllocationRemoveUsersView(LoginRequiredMixin, UserPassesTestMixin, BaseDet
 
         users_removed_count = len(allocation_users)
         messages.success(
-            request, f"Removed {users_removed_count} user{pluralize(users_removed_count)} from allocation."
+            self.request, f"Removed {users_removed_count} user{pluralize(users_removed_count)} from allocation."
         )
+        return super().formset_valid(formset)
 
-        return redirect
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        return super().post(request, *args, **kwargs)
 
 
 class AllocationAttributeCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateView):

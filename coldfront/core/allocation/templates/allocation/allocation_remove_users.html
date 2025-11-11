@@ -12,7 +12,7 @@ Remove Users from Allocation
 <h2>Remove users from allocation for project: {{allocation.project.title}}</h2>
 <hr>
 
-{% if formset %}
+{% if formset.total_form_count > 0 %}
   <div class="card border-light">
     <div class="card-body">
       <form action="{% url 'allocation-remove-users' allocation.pk %}" method="post">

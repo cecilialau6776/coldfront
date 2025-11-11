@@ -2,12 +2,12 @@
 #
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
+from django.contrib import messages
 from django.core.exceptions import ImproperlyConfigured
 from django.db.models import QuerySet
 from django.forms import formset_factory, modelformset_factory
 from django.http import HttpResponseRedirect
 from django.views.generic.base import ContextMixin, TemplateResponseMixin, View
-from django.views.generic.list import MultipleObjectMixin
 
 
 class FormSetMixin(ContextMixin):
@@ -66,6 +66,10 @@ class FormSetMixin(ContextMixin):
 
     def formset_valid(self, formset):
         """If the formset is valid, redirect to the supplied URL."""
+        if formset.non_form_errors():
+            messages.error(self.request, formset.non_form_errors())
+        for error in formset.errors:
+            messages.error(self.request, error)
         return HttpResponseRedirect(self.get_success_url())
 
     def formset_invalid(self, formset):
@@ -123,7 +127,7 @@ class ModelFormSetMixin(FormSetMixin):
     def formset_valid(self, formset):
         """If the formset is valid, save the associated formset."""
         self.objects = formset.save()
-        return super().form_valid(formset)
+        return super().formset_valid(formset)
 
 
 class ProcessFormSetView(View):
@@ -140,9 +144,9 @@ class ProcessFormSetView(View):
         """
         formset = self.get_formset()
         if formset.is_valid():
-            return self.form_valid(formset)
+            return self.formset_valid(formset)
         else:
-            return self.form_invalid(formset)
+            return self.formset_invalid(formset)
 
     # PUT is a valid HTTP verb for creating (with a known URL) or editing an
     # object, note that browsers only support POST for now.
@@ -156,3 +160,11 @@ class BaseFormSetView(FormSetMixin, ProcessFormSetView):
 
 class FormSetView(TemplateResponseMixin, BaseFormSetView):
     """A view for displaying a formset and rendering a template response."""
+
+
+class BaseModelFormSetView(ModelFormSetMixin, ProcessFormSetView):
+    """A base view for displaying a modelformset."""
+
+
+class ModelFormSetView(TemplateResponseMixin, BaseModelFormSetView):
+    """A view for displaying a modelformset and rendering a template response."""

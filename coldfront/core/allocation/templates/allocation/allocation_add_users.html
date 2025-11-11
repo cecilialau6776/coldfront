@@ -12,7 +12,7 @@ Add Users to Allocation
 <h2>Add users to allocation for project: {{allocation.project.title}}</h2>
 <hr>
 
-{% if formset %}
+{% if formset.total_form_count > 0 %}
   <div class="card border-light">
     <div class="card-body">
       <form action="{% url 'allocation-add-users' allocation.pk %}" method="post">
