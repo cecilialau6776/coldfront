@@ -38,7 +38,6 @@ from coldfront.core.allocation.forms import (
     AllocationAttributeForm,
     AllocationAttributeUpdateForm,
     AllocationChangeForm,
-    AllocationChangeNoteForm,
     AllocationChangeRequestForm,
     AllocationForm,
     AllocationInvoiceNoteDeleteForm,
@@ -1528,9 +1527,12 @@ class AllocationAccountListView(LoginRequiredMixin, UserPassesTestMixin, ListVie
         return AllocationAccount.objects.filter(user=self.request.user)
 
 
-class AllocationChangeDetailView(LoginRequiredMixin, UserPassesTestMixin, FormView):
+class AllocationChangeDetailView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
+    model = AllocationChangeRequest
+    form_class = AllocationChangeRequestForm
     formset_class = AllocationAttributeUpdateForm
     template_name = "allocation/allocation_change_detail.html"
+    context_object_name = "allocation_change"
 
     def test_func(self):
         """UserPassesTestMixin Tests"""
@@ -1544,221 +1546,162 @@ class AllocationChangeDetailView(LoginRequiredMixin, UserPassesTestMixin, FormVi
 
         return False
 
-    def get_allocation_attributes_to_change(self, allocation_change_obj):
-        attributes_to_change = allocation_change_obj.allocationattributechangerequest_set.all()
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["disabled_fields"] = ["allocation", "justification", "status"]
+        if self.object.status.name != "Pending" or (
+            not self.request.user.is_staff and not self.request.user.is_superuser
+        ):
+            kwargs["disabled_fields"].append("end_date_extension")
+        return kwargs
 
-        attributes_to_change = [
-            {
-                "change_pk": attribute_change.pk,
-                "attribute_pk": attribute_change.allocation_attribute.pk,
-                "name": attribute_change.allocation_attribute.allocation_attribute_type.name,
-                "value": attribute_change.allocation_attribute.value,
-                "new_value": attribute_change.new_value,
-            }
-            for attribute_change in attributes_to_change
-        ]
+    def get_formset(self, **kwargs):
+        queryset = self.object.allocationattributechangerequest_set.all()
+        formset_kwargs = {
+            "prefix": "attributeform",
+            "queryset": queryset,
+        }
+        formset_kwargs.update(kwargs)
 
-        return attributes_to_change
+        if queryset:
+            AllocationAttributeChangeRequestFormset = modelformset_factory(
+                AllocationAttributeChangeRequest,
+                form=AllocationAttributeChangeRequestForm,
+                extra=0,
+                max_num=len(queryset),
+            )
+            formset = AllocationAttributeChangeRequestFormset(**formset_kwargs)
+            return formset
+        return None
 
     def get_context_data(self, **kwargs):
-        context = {}
-
-        allocation_change_obj = get_object_or_404(AllocationChangeRequest, pk=self.kwargs.get("pk"))
-
-        allocation_attributes_to_change = self.get_allocation_attributes_to_change(allocation_change_obj)
-
-        if allocation_attributes_to_change:
-            formset = formset_factory(self.formset_class, max_num=len(allocation_attributes_to_change))
-            formset = formset(initial=allocation_attributes_to_change, prefix="attributeform")
-            context["formset"] = formset
-
-        context["allocation_change"] = allocation_change_obj
-        context["attribute_changes"] = allocation_attributes_to_change
-
+        context = super().get_context_data(**kwargs)
+        context["formset"] = self.get_formset()
         return context
 
-    def get(self, request, *args, **kwargs):
-        allocation_change_obj = get_object_or_404(AllocationChangeRequest, pk=self.kwargs.get("pk"))
-
-        allocation_change_form = AllocationChangeForm(
-            initial={
-                "justification": allocation_change_obj.justification,
-                "end_date_extension": allocation_change_obj.end_date_extension,
-            }
-        )
-        allocation_change_form.fields["justification"].disabled = True
-        if allocation_change_obj.status.name != "Pending":
-            allocation_change_form.fields["end_date_extension"].disabled = True
-        if not self.request.user.is_staff and not self.request.user.is_superuser:
-            allocation_change_form.fields["end_date_extension"].disabled = True
-
-        note_form = AllocationChangeNoteForm(initial={"notes": allocation_change_obj.notes})
-
-        context = self.get_context_data()
-
-        context["allocation_change_form"] = allocation_change_form
-        context["note_form"] = note_form
-        return render(request, self.template_name, context)
-
     def post(self, request, *args, **kwargs):
-        pk = self.kwargs.get("pk")
+        self.object = self.get_object()
+        redirect = HttpResponseRedirect(reverse("allocation-change-detail", kwargs={"pk": self.object.pk}))
         if not self.request.user.is_superuser:
             messages.error(request, "You do not have permission to update an allocation change request")
-            return HttpResponseRedirect(reverse("allocation-change-detail", kwargs={"pk": pk}))
-
-        allocation_change_obj = get_object_or_404(AllocationChangeRequest, pk=pk)
-        allocation_change_form = AllocationChangeForm(
-            request.POST,
-            initial={
-                "justification": allocation_change_obj.justification,
-                "end_date_extension": allocation_change_obj.end_date_extension,
-            },
-        )
-        allocation_change_form.fields["justification"].required = False
-
-        allocation_attributes_to_change = self.get_allocation_attributes_to_change(allocation_change_obj)
-
-        if allocation_attributes_to_change:
-            formset = formset_factory(self.formset_class, max_num=len(allocation_attributes_to_change))
-            formset = formset(request.POST, initial=allocation_attributes_to_change, prefix="attributeform")
-
-        note_form = AllocationChangeNoteForm(request.POST, initial={"notes": allocation_change_obj.notes})
-
-        if not note_form.is_valid():
-            allocation_change_form = AllocationChangeForm(
-                initial={"justification": allocation_change_obj.justification}
-            )
-            allocation_change_form.fields["justification"].disabled = True
-
-            context = self.get_context_data()
-
-            context["note_form"] = note_form
-            context["allocation_change_form"] = allocation_change_form
-            return render(request, self.template_name, context)
-
-        notes = note_form.cleaned_data.get("notes")
+            return redirect
 
         action = request.POST.get("action")
         if action not in ["update", "approve", "deny"]:
             return HttpResponseBadRequest("Invalid request")
 
+        form = self.get_form()
+        formset = self.get_formset(data=request.POST)
+
+        if not form.is_valid():
+            for error in form.errors:
+                messages.error(request, error)
+            return redirect
+
         if action == "deny":
-            allocation_change_obj.notes = notes
-
+            self.object = form.save()
             allocation_change_status_denied_obj = AllocationChangeStatusChoice.objects.get(name="Denied")
-            allocation_change_obj.status = allocation_change_status_denied_obj
-
-            allocation_change_obj.save()
+            self.object.status = allocation_change_status_denied_obj
+            self.object.save()
 
             messages.success(
                 request,
                 "Allocation change request to {} has been DENIED for {} {} ({})".format(
-                    allocation_change_obj.allocation.resources.first(),
-                    allocation_change_obj.allocation.project.pi.first_name,
-                    allocation_change_obj.allocation.project.pi.last_name,
-                    allocation_change_obj.allocation.project.pi.username,
+                    self.object.allocation.resources.first(),
+                    self.object.allocation.project.pi.first_name,
+                    self.object.allocation.project.pi.last_name,
+                    self.object.allocation.project.pi.username,
                 ),
             )
-
             send_allocation_customer_email(
-                allocation_change_obj.allocation,
+                self.object.allocation,
                 "Allocation Change Denied",
                 "email/allocation_change_denied.txt",
                 domain_url=get_domain_url(self.request),
             )
 
-            return HttpResponseRedirect(reverse("allocation-change-detail", kwargs={"pk": pk}))
+            return redirect
 
-        if not allocation_change_form.is_valid() or (allocation_attributes_to_change and not formset.is_valid()):
-            for error in allocation_change_form.errors:
+        if formset and (not formset.is_valid() or formset.non_form_errors()):
+            if formset.non_form_errors():
+                messages.error(request, formset.non_form_errors())
+            for error in formset.errors:
                 messages.error(request, error)
-            if allocation_attributes_to_change:
-                attribute_errors = ""
-                for error in formset.errors:
-                    if error:
-                        attribute_errors += error.get("__all__")
-                messages.error(request, attribute_errors)
-            return HttpResponseRedirect(reverse("allocation-change-detail", kwargs={"pk": pk}))
+            return redirect
 
-        allocation_change_obj.notes = notes
-
-        if action == "update" and allocation_change_obj.status.name != "Pending":
-            allocation_change_obj.save()
-            messages.success(request, "Allocation change request updated!")
-            return HttpResponseRedirect(reverse("allocation-change-detail", kwargs={"pk": pk}))
-
-        form_data = allocation_change_form.cleaned_data
-        end_date_extension = form_data.get("end_date_extension")
-
-        if not allocation_attributes_to_change and end_date_extension == 0:
+        # formset.clean() checks if the value is the same as the original
+        # deleting all the allocation attribute change requests can result in an
+        # "invalid" change request
+        change_requested = form.has_changed() or (formset and formset.is_valid())
+        if not change_requested:
             messages.error(request, "You must make a change to the allocation.")
-            return HttpResponseRedirect(reverse("allocation-change-detail", kwargs={"pk": pk}))
+            return redirect
 
-        if end_date_extension != allocation_change_obj.end_date_extension:
-            allocation_change_obj.end_date_extension = end_date_extension
+        if action == "update" and self.object.status.name != "Pending":
+            # This is copying the original logic - not sure why only notes gets saved
+            # when the change request's status is pending
+            self.object.notes = form.cleaned_data.get("notes")
+            self.object.save()
+            messages.success(request, "Allocation change request updated!")
+            return redirect
 
-        if allocation_attributes_to_change:
-            for entry in formset:
-                formset_data = entry.cleaned_data
-                new_value = formset_data.get("new_value")
-                attribute_change = AllocationAttributeChangeRequest.objects.get(pk=formset_data.get("change_pk"))
-
-                if new_value != attribute_change.new_value:
-                    attribute_change.new_value = new_value
-                    attribute_change.save()
+        self.object = form.save()
+        formset.save()
 
         if action == "update":
-            allocation_change_obj.save()
             messages.success(request, "Allocation change request updated!")
+            return redirect
 
-        elif action == "approve":
+        if action == "approve":
+            # could probably be moved to the allocation change request (like self.object.approve())
             allocation_change_status_active_obj = AllocationChangeStatusChoice.objects.get(name="Approved")
-            allocation_change_obj.status = allocation_change_status_active_obj
+            self.object.status = allocation_change_status_active_obj
 
-            if allocation_change_obj.end_date_extension > 0:
-                new_end_date = allocation_change_obj.allocation.end_date + relativedelta(
-                    days=allocation_change_obj.end_date_extension
+            if self.object.end_date_extension > 0:
+                new_end_date = self.object.allocation.end_date + relativedelta(days=self.object.end_date_extension)
+                self.object.allocation.end_date = new_end_date
+
+                self.object.allocation.save()
+
+            self.object.save()
+
+            for form in formset:
+                form_data = form.cleaned_data
+                allocation = form_data.get("allocation")
+                allocation_attribute = form_data.get("allocation_attribute")
+                new_value = form_data.get("new_value")
+                allocation_attribute.value = new_value
+                allocation_attribute.save()
+                allocation_attribute_changed.send(
+                    sender=self.__class__,
+                    attribute_pk=allocation_attribute.pk,
+                    allocation_pk=allocation.pk,
                 )
-                allocation_change_obj.allocation.end_date = new_end_date
-
-                allocation_change_obj.allocation.save()
-
-            allocation_change_obj.save()
-            if allocation_attributes_to_change:
-                attribute_change_list = allocation_change_obj.allocationattributechangerequest_set.all()
-                for attribute_change in attribute_change_list:
-                    attribute_change.allocation_attribute.value = attribute_change.new_value
-                    attribute_change.allocation_attribute.save()
-                    allocation_attribute_changed.send(
-                        sender=self.__class__,
-                        attribute_pk=attribute_change.allocation_attribute.pk,
-                        allocation_pk=allocation_change_obj.allocation.pk,
-                    )
 
             messages.success(
                 request,
                 "Allocation change request to {} has been APPROVED for {} {} ({})".format(
-                    allocation_change_obj.allocation.get_parent_resource,
-                    allocation_change_obj.allocation.project.pi.first_name,
-                    allocation_change_obj.allocation.project.pi.last_name,
-                    allocation_change_obj.allocation.project.pi.username,
+                    self.object.allocation.get_parent_resource,
+                    self.object.allocation.project.pi.first_name,
+                    self.object.allocation.project.pi.last_name,
+                    self.object.allocation.project.pi.username,
                 ),
             )
 
             allocation_change_approved.send(
                 sender=self.__class__,
-                allocation_pk=allocation_change_obj.allocation.pk,
-                allocation_change_pk=allocation_change_obj.pk,
+                allocation_pk=self.object.allocation.pk,
+                allocation_change_pk=self.object.pk,
             )
 
             send_allocation_customer_email(
-                allocation_change_obj.allocation,
+                self.object.allocation,
                 "Allocation Change Approved",
                 "email/allocation_change_approved.txt",
                 domain_url=get_domain_url(self.request),
             )
 
-        return HttpResponseRedirect(reverse("allocation-change-detail", kwargs={"pk": pk}))
+        return redirect
 
 
 class AllocationChangeListView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
@@ -1891,6 +1834,8 @@ class AllocationChangeView(LoginRequiredMixin, UserPassesTestMixin, BaseDetailVi
                 max_num=len(queryset),
             )
             formset = AllocationAttributeChangeRequestFormset(**formset_kwargs)
+            for form in formset:
+                form.fields["allocation_change_request"].required = False
             return formset
         return None
 
@@ -1900,29 +1845,29 @@ class AllocationChangeView(LoginRequiredMixin, UserPassesTestMixin, BaseDetailVi
         return context
 
     def post(self, request, *args, **kwargs):
-        self.object = get_object_or_404(Allocation, pk=self.kwargs.get("pk"))
+        self.object = self.get_object()
 
         redirect = HttpResponseRedirect(reverse("allocation-change", kwargs={"pk": self.object.pk}))
 
         form = self.get_form()
         formset = self.get_formset(data=request.POST)
 
-        change_requested = form.has_changed() or (formset and formset.has_changed())
+        # formset.clean() checks if the value is the same as the original
+        change_requested = form.has_changed() or formset.is_valid()
         if not change_requested:
             messages.error(request, "You must request a change.")
             return redirect
 
         if not form.is_valid():
-            raise Exception(form.errors)
             for error in form.errors:
-                messages.error(request, f"form error: {error}")
+                messages.error(request, error)
             return redirect
 
         if not formset or not formset.is_valid() or formset.non_form_errors():
             if formset.non_form_errors():
-                messages.error(request, f"Non-form error(s): {formset.non_form_errors()}")
+                messages.error(request, formset.non_form_errors())
             for error in formset.errors:
-                messages.error(request, f"formset error: {error}")
+                messages.error(request, error)
             return redirect
 
         # forms are valid

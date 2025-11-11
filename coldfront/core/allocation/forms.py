@@ -441,6 +441,7 @@ class AllocationChangeRequestForm(forms.ModelForm):
         widgets = {
             "allocation": forms.HiddenInput(),
             "status": forms.HiddenInput(),
+            "notes": forms.Textarea(),
         }
         labels = {"justification": "Justification for Changes"}
         help_texts = {"justification": "Justification for requesting this allocation change request."}
@@ -463,32 +464,38 @@ class AllocationChangeRequestForm(forms.ModelForm):
             self.fields[field].disabled = True
 
     def has_changed(self):
-        # We con't care if "justification" has been changed.
+        # We con't care if "justification" nor "notes" has been changed.
         changed_data = set(self.changed_data)
-        changed_data.discard("justification")
+        changed_data -= {"justification", "notes"}
         return bool(changed_data)
-
-
-class AllocationChangeNoteForm(forms.Form):
-    notes = forms.CharField(
-        max_length=512,
-        label="Notes",
-        required=False,
-        widget=forms.Textarea,
-        help_text="Leave any feedback about the allocation change request.",
-    )
 
 
 class AllocationAttributeChangeRequestForm(forms.ModelForm):
     class Meta:
         model = AllocationAttributeChangeRequest
         fields = ["allocation_change_request", "allocation_attribute", "new_value"]
-        widgets = {
-            "allocation_change_request": forms.HiddenInput(),
-            "allocation_attribute": forms.HiddenInput(),
-        }
+        widgets = {"allocation_attribute": forms.HiddenInput()}
 
-    allocation_change_request = forms.ModelChoiceField(queryset=None, required=False)
+    allocation_change_request = forms.ModelChoiceField(
+        queryset=AllocationChangeRequest.objects.all(),
+        disabled=True,
+        widget=forms.HiddenInput(),
+    )
+
+    def clean(self):
+        form_data = super().clean()
+        allocation_attribute = form_data.get("allocation_attribute")
+        new_value = form_data.get("new_value")
+        if allocation_attribute.value == new_value:
+            raise ValidationError(
+                "New value (%(value)s) cannot be the same as current value for %(attribute)s.",
+                code="no_change_requested",
+                params={"value": new_value, "attribute": allocation_attribute},
+            )
+        if form_data.get("new_value") != "":
+            allocation_attribute.value = form_data.get("new_value")
+            allocation_attribute.clean()
+        return form_data
 
 
 class AllocationAttributeForm(forms.ModelForm):
