@@ -112,8 +112,7 @@ Request Allocation Change
               <tbody>
                 {% for form in formset %}
                   <tr>
-                    <td>{{form.initial.allocation_attribute.allocation_attribute_type}}</td>
-                      <!-- <td>{{form.allocation_attribute}}</td> -->
+                    <td>{{form.initial.allocation_attribute.allocation_attribute_type.name}}</td>
                     <td>{{form.new_value.value}}</td>
                     <td>{{form.new_value}}</td>
                   </tr>

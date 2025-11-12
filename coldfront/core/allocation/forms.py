@@ -5,7 +5,6 @@
 from enum import Enum
 
 from django import forms
-from django.contrib.auth import get_user_model
 from django.db.models.functions import Lower
 from django.forms import BaseModelFormSet, ValidationError
 from django.shortcuts import get_object_or_404
