@@ -9,7 +9,9 @@ from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
+from django.views.generic.detail import BaseDetailView
 
+from coldfront.core.allocation.models import Allocation
 from coldfront.core.project.models import Project
 
 
@@ -33,6 +35,20 @@ class SnakeCaseTemplateNameMixin:
         model_name = self.model.__name__
 
         return ["{}/{}{}.html".format(app_label, to_snake(model_name), self.template_name_suffix)]
+
+
+class AllocationInContextView(BaseDetailView):
+    queryset = Allocation.objects.all()
+    context_object_name = "allocation"
+
+    def get(self, request, *args, **kwargs):
+        self.allocation = self.get_object()
+        return super().get(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        self.allocation = self.get_object()
+        self.object = self.allocation
+        return super().post(request, *args, **kwargs)
 
 
 class ProjectInContextMixin:
