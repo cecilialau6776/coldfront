@@ -51,11 +51,10 @@ class FormSetMixin(ContextMixin):
     def get_formset_factory_kwargs(self):
         """Return the keyword arguments for instantiating the formset factory."""
         initial_len = len(self.get_formset_initial())
-        queryset_len = self.get_formset_queryset().count()
         kwargs = {
             "form": self.get_formset_form_class(),
             "extra": initial_len,
-            "max_num": initial_len + queryset_len,
+            "max_num": initial_len,
         }
         return kwargs
 
@@ -105,6 +104,7 @@ class ModelFormSetMixin(FormSetMixin):
     """Provide a way to show and handle a ModelFormSet in a request."""
 
     formset_model = None
+    formset_queryset = None
 
     def get_formset_queryset(self):
         """
@@ -113,8 +113,8 @@ class ModelFormSetMixin(FormSetMixin):
         The return value must be an iterable and may be an instance of
         `QuerySet` in which case `QuerySet` specific behavior will be enabled.
         """
-        if self.queryset is not None:
-            queryset = self.queryset
+        if self.formset_queryset is not None:
+            queryset = self.formset_queryset
             if isinstance(queryset, QuerySet):
                 queryset = queryset.all()
         elif self.formset_model is not None:
@@ -133,7 +133,14 @@ class ModelFormSetMixin(FormSetMixin):
 
     def get_formset_factory_kwargs(self):
         kwargs = super().get_formset_factory_kwargs()
-        kwargs["model"] = self.formset_model
+        initial_len = len(self.get_formset_initial())
+        queryset_len = self.get_formset_queryset().count()
+        kwargs.update(
+            {
+                "model": self.formset_model,
+                "max_num": initial_len + queryset_len,
+            }
+        )
         return kwargs
 
     def get_formset_kwargs(self):
