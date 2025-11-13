@@ -15,9 +15,8 @@ from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db.models import Q
 from django.db.models.query import QuerySet
-from django.forms import formset_factory
 from django.http import HttpResponseBadRequest, HttpResponseRedirect, JsonResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404
 from django.template.defaultfilters import pluralize
 from django.urls import reverse, reverse_lazy
 from django.views import View
@@ -35,7 +34,7 @@ from coldfront.core.allocation.forms import (
     AllocationAttributeForm,
     AllocationChangeRequestForm,
     AllocationForm,
-    AllocationInvoiceNoteDeleteForm,
+    AllocationInvoiceNoteForm,
     AllocationInvoiceUpdateForm,
     AllocationReviewUserForm,
     AllocationSearchForm,
@@ -1271,11 +1270,8 @@ class AllocationInvoiceDetailView(
 
 class AllocationInvoiceNoteCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateView):
     model = AllocationUserNote
+    form_class = AllocationInvoiceNoteForm
     template_name = "allocation/allocation_add_invoice_note.html"
-    fields = (
-        "is_private",
-        "note",
-    )
 
     def test_func(self):
         """UserPassesTestMixin Tests"""
@@ -1290,34 +1286,21 @@ class AllocationInvoiceNoteCreateView(LoginRequiredMixin, UserPassesTestMixin, C
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        pk = self.kwargs.get("pk")
-        allocation_obj = get_object_or_404(Allocation, pk=pk)
+        allocation_obj = get_object_or_404(Allocation, pk=self.kwargs.get("pk"))
         context["allocation"] = allocation_obj
         return context
 
-    def form_valid(self, form):
-        # This method is called when valid form data has been POSTed.
-        # It should return an HttpResponse.
-        pk = self.kwargs.get("pk")
-        allocation_obj = get_object_or_404(Allocation, pk=pk)
-        obj = form.save(commit=False)
-        obj.author = self.request.user
-        obj.allocation = allocation_obj
-        obj.save()
-        allocation_obj.save()
-        return super().form_valid(form)
-
-    def get_success_url(self):
-        return reverse_lazy("allocation-invoice-detail", kwargs={"pk": self.object.allocation.pk})
+    def get_initial(self):
+        return {
+            "author": self.request.user,
+            "allocation": get_object_or_404(Allocation, pk=self.kwargs.get("pk")),
+        }
 
 
 class AllocationInvoiceNoteUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     model = AllocationUserNote
+    form_class = AllocationInvoiceNoteForm
     template_name = "allocation/allocation_update_invoice_note.html"
-    fields = (
-        "is_private",
-        "note",
-    )
 
     def test_func(self):
         """UserPassesTestMixin Tests"""
@@ -1330,11 +1313,14 @@ class AllocationInvoiceNoteUpdateView(LoginRequiredMixin, UserPassesTestMixin, U
         messages.error(self.request, "You do not have permission to manage invoices.")
         return False
 
-    def get_success_url(self):
-        return reverse_lazy("allocation-invoice-detail", kwargs={"pk": self.object.allocation.pk})
 
-
-class AllocationInvoiceNoteDeleteView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
+class AllocationInvoiceNoteDeleteView(
+    LoginRequiredMixin, UserPassesTestMixin, AllocationInContextView, ModelFormSetView
+):
+    form_class = AllocationInvoiceNoteForm
+    formset_model = AllocationUserNote
+    formset_form_class = AllocationInvoiceNoteForm
+    formset_prefix = "noteform"
     template_name = "allocation/allocation_delete_invoice_note.html"
 
     def test_func(self):
@@ -1348,49 +1334,23 @@ class AllocationInvoiceNoteDeleteView(LoginRequiredMixin, UserPassesTestMixin, T
         messages.error(self.request, "You do not have permission to manage invoices.")
         return False
 
-    def get_notes_to_delete(self, allocation_obj):
-        notes_to_delete = [
-            {
-                "pk": note.pk,
-                "note": note.note,
-                "author": note.author.username,
-            }
-            for note in allocation_obj.allocationusernote_set.all()
-        ]
+    def get_formset_factory_kwargs(self):
+        kwargs = super().get_formset_factory_kwargs()
+        kwargs["can_delete"] = True
+        return kwargs
 
-        return notes_to_delete
+    def get_formset_queryset(self):
+        return self.allocation.allocationusernote_set.all()
 
-    def get(self, request, *args, **kwargs):
-        pk = self.kwargs.get("pk")
-        allocation_obj = get_object_or_404(Allocation, pk=pk)
-        notes_to_delete = self.get_notes_to_delete(allocation_obj)
-        context = {}
-        if notes_to_delete:
-            formset = formset_factory(AllocationInvoiceNoteDeleteForm, max_num=len(notes_to_delete))
-            formset = formset(initial=notes_to_delete, prefix="noteform")
-            context["formset"] = formset
-        context["allocation"] = allocation_obj
-        return render(request, self.template_name, context)
+    def get_formset(self):
+        formset = super().get_formset()
+        for form in formset:
+            form.fields["note"].widget = forms.HiddenInput()
+            form.fields["note"].disabled = True
+        return formset
 
-    def post(self, request, *args, **kwargs):
-        pk = self.kwargs.get("pk")
-        allocation_obj = get_object_or_404(Allocation, pk=pk)
-        notes_to_delete = self.get_notes_to_delete(allocation_obj)
-
-        formset = formset_factory(AllocationInvoiceNoteDeleteForm, max_num=len(notes_to_delete))
-        formset = formset(request.POST, initial=notes_to_delete, prefix="noteform")
-
-        if formset.is_valid():
-            for form in formset:
-                note_form_data = form.cleaned_data
-                if note_form_data["selected"]:
-                    note_obj = AllocationUserNote.objects.get(pk=note_form_data.get("pk"))
-                    note_obj.delete()
-        else:
-            for error in formset.errors:
-                messages.error(request, error)
-
-        return HttpResponseRedirect(reverse_lazy("allocation-invoice-detail", kwargs={"pk": allocation_obj.pk}))
+    def get_success_url(self):
+        return reverse("allocation-invoice-detail", kwargs={"pk": self.allocation.pk})
 
 
 class AllocationAccountCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateView):

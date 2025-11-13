@@ -407,6 +407,9 @@ class AllocationUserNote(TimeStampedModel):
     def __str__(self):
         return self.note
 
+    def get_absolute_url(self):
+        return reverse("allocation-invoice-detail", kwargs={"pk": self.allocation.pk})
+
 
 class AttributeType(TimeStampedModel):
     """An attribute type indicates the data type of the attribute. Examples include Date, Float, Int, Text, and Yes/No.

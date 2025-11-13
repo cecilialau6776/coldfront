@@ -19,6 +19,7 @@ from coldfront.core.allocation.models import (
     AllocationChangeRequest,
     AllocationStatusChoice,
     AllocationUser,
+    AllocationUserNote,
     AllocationUserStatusChoice,
 )
 from coldfront.core.allocation.utils import get_user_resources
@@ -297,23 +298,25 @@ class AllocationReviewUserForm(forms.ModelForm):
             allocation.project.remove_user(user, signal_sender=self.__class__)
 
 
-class AllocationInvoiceNoteDeleteForm(forms.Form):
-    pk = forms.IntegerField(required=False, disabled=True)
-    note = forms.CharField(widget=forms.Textarea, disabled=True)
-    author = forms.CharField(max_length=512, required=False, disabled=True)
-    selected = forms.BooleanField(initial=False, required=False)
+class AllocationInvoiceNoteForm(forms.ModelForm):
+    class Meta:
+        model = AllocationUserNote
+        fields = ["allocation", "author", "is_private", "note"]
+        widgets = {
+            "allocation": forms.HiddenInput(),
+            "author": forms.HiddenInput(),
+        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["pk"].widget = forms.HiddenInput()
+        self.fields["allocation"].disabled = True
+        self.fields["author"].disabled = True
 
 
 class AllocationAccountForm(forms.ModelForm):
     class Meta:
         model = AllocationAccount
-        fields = [
-            "name",
-        ]
+        fields = ["name"]
 
 
 class AllocationChangeRequestForm(forms.ModelForm):
