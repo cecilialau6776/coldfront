@@ -38,7 +38,7 @@ class SnakeCaseTemplateNameMixin:
 
 
 class AllocationInContextView(BaseDetailView):
-    queryset = Allocation.objects.all()
+    model = Allocation
     context_object_name = "allocation"
 
     def get(self, request, *args, **kwargs):

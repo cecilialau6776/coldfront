@@ -50,8 +50,12 @@ class FormSetMixin(ContextMixin):
 
     def get_formset_factory_kwargs(self):
         """Return the keyword arguments for instantiating the formset factory."""
+        initial_len = len(self.get_formset_initial())
+        queryset_len = self.get_formset_queryset().count()
         kwargs = {
             "form": self.get_formset_form_class(),
+            "extra": initial_len,
+            "max_num": initial_len + queryset_len,
         }
         return kwargs
 
@@ -100,8 +104,7 @@ class FormSetMixin(ContextMixin):
 class ModelFormSetMixin(FormSetMixin):
     """Provide a way to show and handle a ModelFormSet in a request."""
 
-    model = None
-    fields = None
+    formset_model = None
 
     def get_formset_queryset(self):
         """
@@ -114,8 +117,8 @@ class ModelFormSetMixin(FormSetMixin):
             queryset = self.queryset
             if isinstance(queryset, QuerySet):
                 queryset = queryset.all()
-        elif self.model is not None:
-            queryset = self.model._default_manager.all()
+        elif self.formset_model is not None:
+            queryset = self.formset_model._default_manager.all()
         else:
             raise ImproperlyConfigured(
                 "%(cls)s is missing a QuerySet. Define "
@@ -130,7 +133,7 @@ class ModelFormSetMixin(FormSetMixin):
 
     def get_formset_factory_kwargs(self):
         kwargs = super().get_formset_factory_kwargs()
-        kwargs["model"] = self.model
+        kwargs["model"] = self.formset_model
         return kwargs
 
     def get_formset_kwargs(self):
