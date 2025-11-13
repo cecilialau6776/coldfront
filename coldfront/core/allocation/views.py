@@ -22,7 +22,6 @@ from django.template.defaultfilters import pluralize
 from django.urls import reverse, reverse_lazy
 from django.views import View
 from django.views.generic import DetailView, ListView, TemplateView
-from django.views.generic.detail import BaseDetailView
 from django.views.generic.edit import (
     CreateView,
     FormView,
@@ -685,7 +684,6 @@ class AllocationAddUsersView(
     FormErrorsInMessagesMixin,
     AllocationInContextView,
     ModelFormSetView,
-    TemplateView,
 ):
     formset_model = AllocationUser
     formset_form_class = AllocationUserForm
@@ -720,9 +718,6 @@ class AllocationAddUsersView(
             messages.error(request, message)
             return HttpResponseRedirect(reverse("allocation-detail", kwargs={"pk": allocation_obj.pk}))
         return super().dispatch(request, *args, **kwargs)
-
-    def get_success_url(self):
-        return reverse("allocation-detail", kwargs={"pk": self.allocation.pk})
 
     def get_formset_queryset(self):
         return self.allocation.allocationuser_set.filter(status__name__in=["Removed"])
@@ -810,9 +805,7 @@ class AllocationAddUsersView(
         return redirect
 
 
-class AllocationRemoveUsersView(
-    LoginRequiredMixin, UserPassesTestMixin, AllocationInContextView, ModelFormSetView, TemplateView
-):
+class AllocationRemoveUsersView(LoginRequiredMixin, UserPassesTestMixin, AllocationInContextView, ModelFormSetView):
     formset_model = AllocationUser
     formset_form_class = AllocationUserForm
     template_name = "allocation/allocation_remove_users.html"
@@ -843,9 +836,6 @@ class AllocationRemoveUsersView(
             messages.error(request, message)
             return HttpResponseRedirect(reverse("allocation-detail", kwargs={"pk": allocation_obj.pk}))
         return super().dispatch(request, *args, **kwargs)
-
-    def get_success_url(self):
-        return reverse("allocation-detail", kwargs={"pk": self.allocation.pk})
 
     def get_formset_queryset(self):
         queryset = (
@@ -919,9 +909,7 @@ class AllocationAttributeCreateView(LoginRequiredMixin, UserPassesTestMixin, Cre
         return reverse("allocation-detail", kwargs={"pk": self.kwargs.get("pk")})
 
 
-class AllocationAttributeDeleteView(
-    LoginRequiredMixin, UserPassesTestMixin, AllocationInContextView, ModelFormSetView, TemplateView
-):
+class AllocationAttributeDeleteView(LoginRequiredMixin, UserPassesTestMixin, AllocationInContextView, ModelFormSetView):
     formset_model = AllocationAttribute
     formset_form_class = AllocationAttributeForm
     formsest_prefix = "attributeform"
@@ -933,9 +921,6 @@ class AllocationAttributeDeleteView(
             return True
         messages.error(self.request, "You do not have permission to delete allocation attributes.")
         return False
-
-    def get_success_url(self):
-        return reverse("allocation-detail", kwargs={"pk": self.allocation.pk})
 
     def get_formset_queryset(self):
         return self.allocation.allocationattribute_set.all()
@@ -1091,9 +1076,6 @@ class AllocationRenewView(LoginRequiredMixin, UserPassesTestMixin, AllocationInC
 
         return super().dispatch(request, *args, **kwargs)
 
-    def get_success_url(self):
-        return reverse("project-detail", kwargs={"pk": self.allocation.project.pk})
-
     def get_formset_queryset(self):
         allocation_users_qs = (
             self.allocation.allocationuser_set.exclude(status__name__in=["Removed"])
@@ -1165,12 +1147,11 @@ class AllocationInvoiceListView(LoginRequiredMixin, UserPassesTestMixin, ListVie
         return allocations
 
 
-# this is the view class thats rendering allocation_invoice_detail.
-# each view class has a view template that renders
-class AllocationInvoiceDetailView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
-    model = Allocation
+class AllocationInvoiceDetailView(
+    LoginRequiredMixin, UserPassesTestMixin, FormErrorsInMessagesMixin, AllocationInContextView, FormView
+):
+    form_class = AllocationInvoiceUpdateForm
     template_name = "allocation/allocation_invoice_detail.html"
-    context_object_name = "allocation"
 
     def test_func(self):
         """UserPassesTestMixin Tests"""
@@ -1235,40 +1216,18 @@ class AllocationInvoiceDetailView(LoginRequiredMixin, UserPassesTestMixin, Templ
         context["notes"] = notes
         return context
 
-    def get(self, request, *args, **kwargs):
-        pk = self.kwargs.get("pk")
-        allocation_obj = get_object_or_404(Allocation, pk=pk)
+    def get_initial(self):
+        return {"status": self.allocation.status}
 
-        initial_data = {
-            "status": allocation_obj.status,
-        }
+    def form_valid(self, form):
+        form_data = form.cleaned_data
+        self.allocation.status = form_data.get("status")
+        self.allocation.save()
+        messages.success(self.request, "Allocation updated!")
+        return super().form_valid(form)
 
-        form = AllocationInvoiceUpdateForm(initial=initial_data)
-
-        context = self.get_context_data()
-        context["form"] = form
-        context["allocation"] = allocation_obj
-
-        return render(request, self.template_name, context)
-
-    def post(self, request, *args, **kwargs):
-        pk = self.kwargs.get("pk")
-        allocation_obj = get_object_or_404(Allocation, pk=pk)
-
-        initial_data = {
-            "status": allocation_obj.status,
-        }
-        form = AllocationInvoiceUpdateForm(request.POST, initial=initial_data)
-
-        if form.is_valid():
-            form_data = form.cleaned_data
-            allocation_obj.status = form_data.get("status")
-            allocation_obj.save()
-            messages.success(request, "Allocation updated!")
-        else:
-            for error in form.errors:
-                messages.error(request, error)
-        return HttpResponseRedirect(reverse("allocation-invoice-detail", kwargs={"pk": pk}))
+    def get_success_url(self):
+        return reverse("allocation-invoice-detail", kwargs={"pk": self.allocation.pk})
 
 
 class AllocationAddInvoiceNoteView(LoginRequiredMixin, UserPassesTestMixin, CreateView):
@@ -1396,6 +1355,8 @@ class AllocationDeleteInvoiceNoteView(LoginRequiredMixin, UserPassesTestMixin, T
 
 
 class AllocationAccountCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateView):
+    # TODO: form_valid and form_invalid set headers... not super sure why
+    #       but this is unique compared to the rest of the codebase
     model = AllocationAccount
     template_name = "allocation/allocation_allocationaccount_create.html"
     form_class = AllocationAccountForm
@@ -1762,15 +1723,14 @@ class AllocationChangeView(
             url_path=reverse("allocation-change-list"),
             domain_url=get_domain_url(self.request),
         )
-        return HttpResponseRedirect(reverse("allocation-detail", kwargs={"pk": self.allocation.pk}))
+        return self.get_success_url()
 
 
-class AllocationAttributeEditView(LoginRequiredMixin, UserPassesTestMixin, BaseDetailView, FormSetView):
-    model = Allocation
-    formset_form_class = AllocationAttributeEditForm
-    template_name = "allocation/allocation_attribute_edit.html"
+class AllocationAttributeEditView(LoginRequiredMixin, UserPassesTestMixin, AllocationInContextView, ModelFormSetView):
+    formset_model = AllocationAttribute
+    formset_form_class = AllocationAttributeForm
     formset_prefix = "attributeform"
-    context_object_name = "allocation"
+    template_name = "allocation/allocation_attribute_edit.html"
 
     def test_func(self):
         """UserPassesTestMixin Tests"""
@@ -1797,67 +1757,19 @@ class AllocationAttributeEditView(LoginRequiredMixin, UserPassesTestMixin, BaseD
 
         return attributes_to_change
 
-    def get_formset_initial(self):
-        return self.get_allocation_attributes_to_change(self.object)
+    def get_formset_queryset(self):
+        return self.allocation.allocationattribute_set.all()
 
-    def get_formset_factory_kwargs(self):
-        kwargs = super().get_formset_factory_kwargs()
-        kwargs["max_num"] = len(self.get_allocation_attributes_to_change(self.object))
+    def get_formset_kwargs(self):
+        kwargs = super().get_formset_kwargs()
+        kwargs["form_kwargs"] = {"disabled_fields": ["allocation_attribute_type", "allocation"]}
         return kwargs
 
-    def get(self, request, *args, **kwargs):
-        self.object = self.get_object()
-        context = self.get_context_data()
-        allocation_obj = get_object_or_404(Allocation, pk=self.kwargs.get("pk"))
-        allocation_attributes_to_change = self.get_allocation_attributes_to_change(allocation_obj)
-
-        if not allocation_attributes_to_change:
-            return render(request, self.template_name, context)
-
-        context["attributes"] = allocation_attributes_to_change
-        return render(request, self.template_name, context)
-
-    def post(self, request, *args, **kwargs):
-        self.object = self.get_object()
-        attribute_changes_to_make = set()
-
-        pk = self.kwargs.get("pk")
-        allocation_obj = get_object_or_404(Allocation, pk=pk)
-        allocation_attributes_to_change = self.get_allocation_attributes_to_change(allocation_obj)
-
-        ok_redirect = HttpResponseRedirect(reverse("allocation-detail", kwargs={"pk": pk}))
-        if not allocation_attributes_to_change:
-            return ok_redirect
-
-        formset = self.get_formset()
-        if not formset.is_valid():
-            attribute_errors = ""
-            for error in formset.errors:
-                if error:
-                    attribute_errors += error.get("__all__")
-            messages.error(request, attribute_errors)
-            error_redirect = HttpResponseRedirect(reverse("allocation-attribute-edit", kwargs={"pk": pk}))
-            return error_redirect
-
-        for entry in formset:
-            formset_data = entry.cleaned_data
-            value = formset_data.get("value")
-
-            if value != "":
-                allocation_attribute = AllocationAttribute.objects.get(pk=formset_data.get("attribute_pk"))
-                if allocation_attribute.value != value:
-                    attribute_changes_to_make.add((allocation_attribute, value))
-
-        for allocation_attribute, value in attribute_changes_to_make:
-            allocation_attribute.value = value
-            allocation_attribute.save()
-            allocation_attribute_changed.send(
-                sender=self.__class__,
-                attribute_pk=allocation_attribute.pk,
-                allocation_pk=pk,
-            )
-
-        return ok_redirect
+    def get_formset(self):
+        formset = super().get_formset()
+        for form in formset:
+            form.fields["allocation_attribute_type"].widget = forms.HiddenInput()
+        return formset
 
 
 class AllocationChangeDeleteAttributeView(LoginRequiredMixin, UserPassesTestMixin, View):

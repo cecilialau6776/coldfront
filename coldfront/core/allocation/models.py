@@ -11,6 +11,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.urls import reverse
 from django.utils.html import escape, format_html
 from django.utils.module_loading import import_string
 from django.utils.safestring import SafeString
@@ -366,6 +367,9 @@ class Allocation(TimeStampedModel):
         allocation_user.status = AllocationUserStatusChoice.objects.get(name="Removed")
         allocation_user.save()
         allocation_remove_user.send(sender=signal_sender, allocation_user_pk=allocation_user.pk)
+
+    def get_absolute_url(self):
+        return reverse("allocation-detail", kwargs={"pk": self.pk})
 
 
 class AllocationAdminNote(TimeStampedModel):
