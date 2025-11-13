@@ -32,7 +32,6 @@ from coldfront.config.core import ALLOCATION_EULA_ENABLE
 from coldfront.core.allocation.forms import (
     AllocationAccountForm,
     AllocationAttributeChangeRequestForm,
-    AllocationAttributeEditForm,
     AllocationAttributeForm,
     AllocationChangeRequestForm,
     AllocationForm,
@@ -80,7 +79,7 @@ from coldfront.core.utils.mail import (
     send_email_template,
 )
 from coldfront.core.utils.mixins.views import AllocationInContextView
-from coldfront.core.utils.views import FormErrorsInMessagesMixin, FormSetView, ModelFormSetView
+from coldfront.core.utils.views import FormErrorsInMessagesMixin, ModelFormSetView
 
 ALLOCATION_ENABLE_ALLOCATION_RENEWAL = import_from_settings("ALLOCATION_ENABLE_ALLOCATION_RENEWAL", True)
 ALLOCATION_DEFAULT_ALLOCATION_LENGTH = import_from_settings("ALLOCATION_DEFAULT_ALLOCATION_LENGTH", 365)
@@ -678,13 +677,7 @@ class AllocationCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateView):
         return reverse("project-detail", kwargs={"pk": self.kwargs.get("project_pk")})
 
 
-class AllocationAddUsersView(
-    LoginRequiredMixin,
-    UserPassesTestMixin,
-    FormErrorsInMessagesMixin,
-    AllocationInContextView,
-    ModelFormSetView,
-):
+class AllocationUsersAddView(LoginRequiredMixin, UserPassesTestMixin, AllocationInContextView, ModelFormSetView):
     formset_model = AllocationUser
     formset_form_class = AllocationUserForm
     template_name = "allocation/allocation_add_users.html"
@@ -805,7 +798,7 @@ class AllocationAddUsersView(
         return redirect
 
 
-class AllocationRemoveUsersView(LoginRequiredMixin, UserPassesTestMixin, AllocationInContextView, ModelFormSetView):
+class AllocationUsersRemoveView(LoginRequiredMixin, UserPassesTestMixin, AllocationInContextView, ModelFormSetView):
     formset_model = AllocationUser
     formset_form_class = AllocationUserForm
     template_name = "allocation/allocation_remove_users.html"
@@ -951,6 +944,52 @@ class AllocationAttributeDeleteView(LoginRequiredMixin, UserPassesTestMixin, All
             f"Deleted {attributes_deleted_count} attribute{pluralize(attributes_deleted_count)} from allocation.",
         )
         return super().formset_valid(formset)
+
+
+class AllocationAttributeEditView(LoginRequiredMixin, UserPassesTestMixin, AllocationInContextView, ModelFormSetView):
+    formset_model = AllocationAttribute
+    formset_form_class = AllocationAttributeForm
+    formset_prefix = "attributeform"
+    template_name = "allocation/allocation_attribute_edit.html"
+
+    def test_func(self):
+        """UserPassesTestMixin Tests"""
+        user = self.request.user
+        if user.is_superuser or user.is_staff:
+            return True
+
+        messages.error(self.request, "You do not have permission to edit this allocation's attributes.")
+
+        return False
+
+    def get_allocation_attributes_to_change(self, allocation_obj):
+        attributes_to_change = allocation_obj.allocationattribute_set.all()
+
+        attributes_to_change = [
+            {
+                "attribute_pk": attribute.pk,
+                "name": attribute.allocation_attribute_type.name,
+                "orig_value": attribute.value,
+                "value": attribute.value,
+            }
+            for attribute in attributes_to_change
+        ]
+
+        return attributes_to_change
+
+    def get_formset_queryset(self):
+        return self.allocation.allocationattribute_set.all()
+
+    def get_formset_kwargs(self):
+        kwargs = super().get_formset_kwargs()
+        kwargs["form_kwargs"] = {"disabled_fields": ["allocation_attribute_type", "allocation"]}
+        return kwargs
+
+    def get_formset(self):
+        formset = super().get_formset()
+        for form in formset:
+            form.fields["allocation_attribute_type"].widget = forms.HiddenInput()
+        return formset
 
 
 class AllocationNoteCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateView):
@@ -1230,7 +1269,7 @@ class AllocationInvoiceDetailView(
         return reverse("allocation-invoice-detail", kwargs={"pk": self.allocation.pk})
 
 
-class AllocationAddInvoiceNoteView(LoginRequiredMixin, UserPassesTestMixin, CreateView):
+class AllocationInvoiceNoteCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateView):
     model = AllocationUserNote
     template_name = "allocation/allocation_add_invoice_note.html"
     fields = (
@@ -1272,7 +1311,7 @@ class AllocationAddInvoiceNoteView(LoginRequiredMixin, UserPassesTestMixin, Crea
         return reverse_lazy("allocation-invoice-detail", kwargs={"pk": self.object.allocation.pk})
 
 
-class AllocationUpdateInvoiceNoteView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
+class AllocationInvoiceNoteUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
     model = AllocationUserNote
     template_name = "allocation/allocation_update_invoice_note.html"
     fields = (
@@ -1295,7 +1334,7 @@ class AllocationUpdateInvoiceNoteView(LoginRequiredMixin, UserPassesTestMixin, U
         return reverse_lazy("allocation-invoice-detail", kwargs={"pk": self.object.allocation.pk})
 
 
-class AllocationDeleteInvoiceNoteView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
+class AllocationInvoiceNoteDeleteView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
     template_name = "allocation/allocation_delete_invoice_note.html"
 
     def test_func(self):
@@ -1724,52 +1763,6 @@ class AllocationChangeView(
             domain_url=get_domain_url(self.request),
         )
         return self.get_success_url()
-
-
-class AllocationAttributeEditView(LoginRequiredMixin, UserPassesTestMixin, AllocationInContextView, ModelFormSetView):
-    formset_model = AllocationAttribute
-    formset_form_class = AllocationAttributeForm
-    formset_prefix = "attributeform"
-    template_name = "allocation/allocation_attribute_edit.html"
-
-    def test_func(self):
-        """UserPassesTestMixin Tests"""
-        user = self.request.user
-        if user.is_superuser or user.is_staff:
-            return True
-
-        messages.error(self.request, "You do not have permission to edit this allocation's attributes.")
-
-        return False
-
-    def get_allocation_attributes_to_change(self, allocation_obj):
-        attributes_to_change = allocation_obj.allocationattribute_set.all()
-
-        attributes_to_change = [
-            {
-                "attribute_pk": attribute.pk,
-                "name": attribute.allocation_attribute_type.name,
-                "orig_value": attribute.value,
-                "value": attribute.value,
-            }
-            for attribute in attributes_to_change
-        ]
-
-        return attributes_to_change
-
-    def get_formset_queryset(self):
-        return self.allocation.allocationattribute_set.all()
-
-    def get_formset_kwargs(self):
-        kwargs = super().get_formset_kwargs()
-        kwargs["form_kwargs"] = {"disabled_fields": ["allocation_attribute_type", "allocation"]}
-        return kwargs
-
-    def get_formset(self):
-        formset = super().get_formset()
-        for form in formset:
-            form.fields["allocation_attribute_type"].widget = forms.HiddenInput()
-        return formset
 
 
 class AllocationChangeDeleteAttributeView(LoginRequiredMixin, UserPassesTestMixin, View):
