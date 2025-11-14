@@ -197,6 +197,7 @@ class AllocationUserForm(forms.ModelForm):
     selected = forms.BooleanField(initial=False, required=False)
 
     def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.fields["status"].disabled = True
 
 

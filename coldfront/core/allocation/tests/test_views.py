@@ -208,7 +208,8 @@ class AllocationAttributeEditViewTest(AllocationViewBaseTest):
         self.client.force_login(self.admin_user, backend=BACKEND)
         self.url = f"/allocation/{self.allocation.pk}/allocationattribute/edit"
         self.post_data = {
-            "attributeform-0-value": self.allocation.get_attribute("Storage Quota (TB)"),
+            "attributeform-0-value": self.allocation_attribute.value,
+            "attributeform-0-id": self.allocation_attribute.pk,
             "attributeform-INITIAL_FORMS": "1",
             "attributeform-MAX_NUM_FORMS": "1",
             "attributeform-MIN_NUM_FORMS": "0",

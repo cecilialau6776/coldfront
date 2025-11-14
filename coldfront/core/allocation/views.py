@@ -205,7 +205,7 @@ class AllocationDetailView(LoginRequiredMixin, UserPassesTestMixin, DetailView, 
         self.object = self.get_object()
         if not self.request.user.is_superuser:
             messages.success(request, "You do not have permission to update the allocation")
-            return self.object.get_absolute_url()
+            return HttpResponseRedirect(self.object.get_absolute_url())
 
         action = request.POST.get("action")
         if action not in ["update", "approve", "auto-approve", "deny"]:
@@ -1719,7 +1719,7 @@ class AllocationChangeView(
             url_path=reverse("allocation-change-list"),
             domain_url=get_domain_url(self.request),
         )
-        return self.get_success_url()
+        return HttpResponseRedirect(self.get_success_url())
 
 
 class AllocationChangeDeleteAttributeView(LoginRequiredMixin, UserPassesTestMixin, View):
