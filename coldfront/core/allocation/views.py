@@ -203,10 +203,9 @@ class AllocationDetailView(LoginRequiredMixin, UserPassesTestMixin, DetailView, 
 
     def post(self, request, *args, **kwargs):
         self.object = self.get_object()
-        pk = self.kwargs.get("pk")
         if not self.request.user.is_superuser:
             messages.success(request, "You do not have permission to update the allocation")
-            return HttpResponseRedirect(reverse("allocation-detail", kwargs={"pk": pk}))
+            return self.object.get_absolute_url()
 
         action = request.POST.get("action")
         if action not in ["update", "approve", "auto-approve", "deny"]:
@@ -506,24 +505,24 @@ class AllocationListView(LoginRequiredMixin, ListView):
             data = allocation_search_form.cleaned_data
             filter_parameters = ""
             for key, value in data.items():
-                if value:
-                    if isinstance(value, QuerySet):
-                        filter_parameters += "".join([f"{key}={ele.pk}&" for ele in value])
-                    elif hasattr(value, "pk"):
-                        filter_parameters += f"{key}={value.pk}&"
-                    else:
-                        filter_parameters += f"{key}={value}&"
+                if not value:
+                    continue
+                if isinstance(value, QuerySet):
+                    filter_parameters += "".join([f"{key}={ele.pk}&" for ele in value])
+                elif hasattr(value, "pk"):
+                    filter_parameters += f"{key}={value.pk}&"
+                else:
+                    filter_parameters += f"{key}={value}&"
             context["allocation_search_form"] = allocation_search_form
         else:
             filter_parameters = None
             context["allocation_search_form"] = AllocationSearchForm()
 
+        filter_parameters_with_order_by = filter_parameters
         order_by = self.request.GET.get("order_by")
         if order_by:
             direction = self.request.GET.get("direction")
-            filter_parameters_with_order_by = filter_parameters + "order_by=%s&direction=%s&" % (order_by, direction)
-        else:
-            filter_parameters_with_order_by = filter_parameters
+            filter_parameters_with_order_by += "order_by=%s&direction=%s&" % (order_by, direction)
 
         if filter_parameters:
             context["expand_accordion"] = "show"
@@ -582,29 +581,27 @@ class AllocationCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateView):
         context["project"] = project_obj
 
         user_resources = get_user_resources(self.request.user)
-        resources_form_default_quantities = {}
-        resources_form_descriptions = {}
-        resources_form_label_texts = {}
-        resources_with_eula = {}
-        attr_names = ("quantity_default_value", "form_description", "quantity_label", "eula")
+        resources_dict = {
+            "quantity_default_value": {},
+            "form_description": {},
+            "quantity_label": {},
+            "eula": {},
+        }
         for resource in user_resources:
-            for attr_name in attr_names:
+            for attr_name in resources_dict.keys():
                 query = Q(resource_attribute_type__name=attr_name)
-                if resource.resourceattribute_set.filter(query).exists():
-                    value = resource.resourceattribute_set.get(query).value
-                    if attr_name == "quantity_default_value":
-                        resources_form_default_quantities[resource.id] = int(value)
-                    if attr_name == "form_description":
-                        resources_form_descriptions[resource.id] = value
-                    if attr_name == "quantity_label":
-                        resources_form_label_texts[resource.id] = value
-                    if attr_name == "eula":
-                        resources_with_eula[resource.id] = value
+                if not resource.resourceattribute_set.filter(query).exists():
+                    continue
+                value = resource.resourceattribute_set.get(query).value
+                if attr_name == "quantity_default_value":
+                    resources_dict[attr_name][resource.id] = int(value)
+                else:
+                    resources_dict[attr_name][resource.id] = value
 
-        context["resources_form_default_quantities"] = resources_form_default_quantities
-        context["resources_form_descriptions"] = resources_form_descriptions
-        context["resources_form_label_texts"] = resources_form_label_texts
-        context["resources_with_eula"] = resources_with_eula
+        context["resources_form_default_quantities"] = resources_dict["quantity_default_value"]
+        context["resources_form_descriptions"] = resources_dict["form_description"]
+        context["resources_form_label_texts"] = resources_dict["quantity_label"]
+        context["resources_with_eula"] = resources_dict["eula"]
         context["resources_with_accounts"] = list(
             Resource.objects.filter(name__in=list(ALLOCATION_ACCOUNT_MAPPING.keys())).values_list("id", flat=True)
         )

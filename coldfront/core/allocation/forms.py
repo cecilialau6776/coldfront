@@ -95,7 +95,7 @@ class AllocationForm(forms.ModelForm):
             allocation_accounts = AllocationAccount.objects.filter(user=request_user)
             if allocation_accounts:
                 self.fields["allocation_account"].choices = (
-                    ((account.name, account.name)) for account in allocation_accounts
+                    (account.name, account.name) for account in allocation_accounts
                 )
         else:
             self.fields["allocation_account"].widget = forms.HiddenInput()
@@ -196,6 +196,9 @@ class AllocationUserForm(forms.ModelForm):
 
     selected = forms.BooleanField(initial=False, required=False)
 
+    def __init__(self, *args, **kwargs):
+        self.fields["status"].disabled = True
+
 
 class BaseAllocationUserFormSet(BaseModelFormSet):
     template_name = "allocation/forms/formsets/allocation_user_formset.html"
@@ -211,17 +214,11 @@ class BaseAllocationUserFormSet(BaseModelFormSet):
     def clean(self):
         if any(self.errors):
             return
-        expected_allocation_user_status = self.form_kwargs["initial"]["status"]
 
         for form in self.forms:
-            status = form.cleaned_data.get("status")
             if not form.cleaned_data.get("selected"):
                 continue
 
-            if status != expected_allocation_user_status:
-                raise ValidationError(
-                    f"Submitted form should have {expected_allocation_user_status} AllocationUserStatus, instead got {status}"
-                )
             user = form.cleaned_data.get("user")
             allocation = form.cleaned_data.get("allocation")
 
