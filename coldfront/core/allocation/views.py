@@ -59,7 +59,6 @@ from coldfront.core.allocation.models import (
 )
 from coldfront.core.allocation.signals import (
     allocation_activate,
-    allocation_activate_user,
     allocation_attribute_changed,
     allocation_change_approved,
     allocation_change_created,
@@ -71,11 +70,9 @@ from coldfront.core.project.models import Project, ProjectPermission
 from coldfront.core.resource.models import Resource
 from coldfront.core.utils.common import get_domain_url, import_from_settings
 from coldfront.core.utils.mail import (
-    build_link,
     send_allocation_admin_email,
     send_allocation_customer_email,
     send_allocation_eula_customer_email,
-    send_email_template,
 )
 
 ALLOCATION_ENABLE_ALLOCATION_RENEWAL = import_from_settings("ALLOCATION_ENABLE_ALLOCATION_RENEWAL", True)
@@ -272,7 +269,7 @@ class AllocationDetailView(LoginRequiredMixin, UserPassesTestMixin, TemplateView
                 status__name__in=["Removed", "Error", "DeclinedEULA", "PendingEULA"]
             )
             for allocation_user in allocation_users:
-                allocation_activate_user.send(sender=self.__class__, allocation_user_pk=allocation_user.pk)
+                allocation_obj.activate_user(allocation_user, signal_sender=self.__class__)
 
             send_allocation_customer_email(
                 allocation_obj,
@@ -405,8 +402,7 @@ class AllocationEULAView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
                             cc_managers=EMAIL_ALLOCATION_EULA_CONFIRMATIONS_CC_MANAGERS,
                             include_eula=EMAIL_ALLOCATION_EULA_INCLUDE_ACCEPTED_EULA,
                         )
-                if allocation_obj.status == AllocationStatusChoice.objects.get(name="Active"):
-                    allocation_activate_user.send(sender=self.__class__, allocation_user_pk=allocation_user_obj.pk)
+                allocation_obj.activate_user(allocation_user_obj, signal_sender=self.__class__)
             elif action == "declined_eula":
                 allocation_user_obj.status = AllocationUserStatusChoice.objects.get(name="DeclinedEULA")
                 messages.warning(
@@ -868,62 +864,12 @@ class AllocationAddUsersView(LoginRequiredMixin, UserPassesTestMixin, TemplateVi
         users_added_count = 0
 
         if formset.is_valid():
-            allocation_user_active_status_choice = AllocationUserStatusChoice.objects.get(name="Active")
-            if ALLOCATION_EULA_ENABLE:
-                allocation_user_pending_status_choice = AllocationUserStatusChoice.objects.get(name="PendingEULA")
-
             for form in formset:
                 user_form_data = form.cleaned_data
                 if user_form_data["selected"]:
                     users_added_count += 1
-
                     user_obj = get_user_model().objects.get(username=user_form_data.get("username"))
-
-                    if allocation_obj.allocationuser_set.filter(user=user_obj).exists():
-                        allocation_user_obj = allocation_obj.allocationuser_set.get(user=user_obj)
-                        if ALLOCATION_EULA_ENABLE and not user_obj.userprofile.is_pi and allocation_obj.get_eula():
-                            allocation_user_obj.status = allocation_user_pending_status_choice
-                            send_email_template(
-                                f"Agree to EULA for {allocation_obj.get_parent_resource.__str__()}",
-                                "email/allocation_agree_to_eula.txt",
-                                {
-                                    "resource": allocation_obj.get_parent_resource,
-                                    "url": build_link(
-                                        reverse("allocation-review-eula", kwargs={"pk": allocation_obj.pk}),
-                                        domain_url=get_domain_url(self.request),
-                                    ),
-                                },
-                                self.request.user.email,
-                                [user_obj],
-                            )
-                        else:
-                            allocation_user_obj.status = allocation_user_active_status_choice
-                        allocation_user_obj.save()
-                    else:
-                        if ALLOCATION_EULA_ENABLE and not user_obj.userprofile.is_pi and allocation_obj.get_eula():
-                            allocation_user_obj = AllocationUser.objects.create(
-                                allocation=allocation_obj, user=user_obj, status=allocation_user_pending_status_choice
-                            )
-                            send_email_template(
-                                f"Agree to EULA for {allocation_obj.get_parent_resource.__str__()}",
-                                "email/allocation_agree_to_eula.txt",
-                                {
-                                    "resource": allocation_obj.get_parent_resource,
-                                    "url": build_link(
-                                        reverse("allocation-review-eula", kwargs={"pk": allocation_obj.pk}),
-                                        domain_url=get_domain_url(self.request),
-                                    ),
-                                },
-                                self.request.user.email,
-                                [user_obj],
-                            )
-                        else:
-                            allocation_user_obj = AllocationUser.objects.create(
-                                allocation=allocation_obj, user=user_obj, status=allocation_user_active_status_choice
-                            )
-
-                    if allocation_user_obj.status == allocation_user_active_status_choice:
-                        allocation_activate_user.send(sender=self.__class__, allocation_user_pk=allocation_user_obj.pk)
+                    allocation_obj.add_user(user_obj, signal_sender=self.__class__)
 
             user_plural = "user" if users_added_count == 1 else "users"
             messages.success(request, f"Added {users_added_count} {user_plural} to allocation.")

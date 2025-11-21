@@ -19,16 +19,20 @@ from model_utils.models import TimeStampedModel
 from simple_history.models import HistoricalRecords
 
 import coldfront.core.attribute_expansion as attribute_expansion
-from coldfront.core.allocation.signals import allocation_remove_user
+from coldfront.config.core import ALLOCATION_EULA_ENABLE
+from coldfront.core.allocation.signals import allocation_activate_user, allocation_remove_user
 from coldfront.core.project.models import Project, ProjectPermission
 from coldfront.core.resource.models import Resource
 from coldfront.core.utils.common import import_from_settings
+from coldfront.core.utils.mail import build_link, send_email_template
 
 logger = logging.getLogger(__name__)
 
 ALLOCATION_ATTRIBUTE_VIEW_LIST = import_from_settings("ALLOCATION_ATTRIBUTE_VIEW_LIST", [])
 ALLOCATION_FUNCS_ON_EXPIRE = import_from_settings("ALLOCATION_FUNCS_ON_EXPIRE", [])
 ALLOCATION_RESOURCE_ORDERING = import_from_settings("ALLOCATION_RESOURCE_ORDERING", ["-is_allocatable", "name"])
+
+EMAIL_SENDER = import_from_settings("EMAIL_SENDER")
 
 
 class AllocationPermission(Enum):
@@ -356,9 +360,60 @@ class Allocation(TimeStampedModel):
         else:
             return None
 
+    def activate_user(self, user, signal_sender=None):
+        """
+        Marks an `AllocationUser` as "Active". If this allocation is active, also sends `allocation_activate_user` signal.
+
+        Params:
+            user (AllocationUser): User to activate.
+            singal_sender (str): Sender for the `allocation_activate_user` signal.
+        """
+        user.status = AllocationUserStatusChoice.objects.get(name="Active")
+        user.save()
+        if self.status.name == "Active":
+            allocation_activate_user.send(sender=signal_sender, allocation_user_pk=user.pk)
+
+    def add_user(self, user, signal_sender=None):
+        """
+        Adds a user to the allocation.
+
+        If EULAs are enabled and this allocation has an associated EULA, marks the user
+            as "PendingEULA" and sends the user an email asking them to agree to the EULA.
+        Otherwise, marks the user as "Active." Also sends the `allocation_activate_user`
+            signal if the allocation status is "Active."
+
+        Params:
+            user (User): User to add.
+            singal_sender (str): Sender for the `allocation_activate_user` signal.
+        """
+        user_status = "Active"
+        is_pending_eula = ALLOCATION_EULA_ENABLE and not user.userprofile.is_pi and self.get_eula()
+        if is_pending_eula:
+            user_status = "PendingEULA"
+        user_status_obj = AllocationUserStatusChoice.objects.get(name=user_status)
+
+        allocation_user, _created = self.allocationuser_set.update_or_create(
+            user=user, defaults={"status": user_status_obj}
+        )
+
+        if is_pending_eula:
+            send_email_template(
+                f"Agree to EULA for {self.get_parent_resource.__str__()}",
+                "email/allocation_agree_to_eula.txt",
+                {
+                    "resource": self.get_parent_resource,
+                    "url": build_link(reverse("allocation-review-eula", kwargs={"pk": self.pk})),
+                },
+                EMAIL_SENDER,
+                [user.email],
+            )
+
+        if self.status.name == "Active":
+            allocation_activate_user.send(sender=signal_sender, allocation_user_pk=allocation_user.pk)
+
     def remove_user(self, user, signal_sender=None):
         """
-        Marks an `AllocationUser` as 'Removed' and sends the `allocation_remove_user`signal.
+        Marks an `AllocationUser` as 'Removed' and sends the `allocation_remove_user` signal.
 
         Quietly fails if the AllocationUser does not exist.
 
