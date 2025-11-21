@@ -15,6 +15,7 @@ from model_utils.models import TimeStampedModel
 from simple_history.models import HistoricalRecords
 
 from coldfront.core.field_of_science.models import FieldOfScience
+from coldfront.core.project.signals import project_remove_user
 from coldfront.core.utils.common import import_from_settings
 from coldfront.core.utils.validate import AttributeValidator
 
@@ -251,7 +252,7 @@ We do not have information about your research. Please provide a detailed descri
 
         Params:
             user (User|ProjectUser): User to remove.
-            singal_sender (str): Sender for the `allocation_remove_user` signal.
+            singal_sender (str): Sender for the `project_remove_user` and `allocation_remove_user` signals.
 
         Raises:
             ProjectUser.DoesNotExist: If `user` is a `User` and that user is not found in the Project.
@@ -279,6 +280,7 @@ We do not have information about your research. Please provide a detailed descri
 
         project_user.status = ProjectUserStatusChoice.objects.get(name="Removed")
         project_user.save()
+        project_remove_user.send(sender=signal_sender, project_user_pk=project_user.pk)
 
     def get_absolute_url(self):
         return reverse("project-detail", kwargs={"pk": self.pk})
