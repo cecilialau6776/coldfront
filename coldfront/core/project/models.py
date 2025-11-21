@@ -5,10 +5,12 @@
 import datetime
 from enum import Enum
 
+from django.contrib.auth import get_user_model
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.validators import MinLengthValidator
 from django.db import models
+from django.urls import reverse
 from model_utils.models import TimeStampedModel
 from simple_history.models import HistoricalRecords
 
@@ -242,6 +244,44 @@ We do not have information about your research. Please provide a detailed descri
 
     def natural_key(self):
         return (self.title,) + self.pi.natural_key()
+
+    def remove_user(self, user, signal_sender=None):
+        """
+        Marks a `ProjectUser` and any associated `AllocationUser`s as 'Removed'.
+
+        Params:
+            user (User|ProjectUser): User to remove.
+            singal_sender (str): Sender for the `allocation_remove_user` signal.
+
+        Raises:
+            ProjectUser.DoesNotExist: If `user` is a `User` and that user is not found in the Project.
+
+        """
+        if isinstance(user, ProjectUser):
+            project_user = user
+        elif isinstance(user, get_user_model()):
+            project_user = self.projectuser_set.get(user=user)
+
+        for active_allocation in self.allocation_set.filter(
+            status__name__in=(
+                "Active",
+                "Denied",
+                "New",
+                "Paid",
+                "Payment Pending",
+                "Payment Requested",
+                "Payment Declined",
+                "Renewal Requested",
+                "Unpaid",
+            )
+        ):
+            active_allocation.remove_user(project_user.user, signal_sender)
+
+        project_user.status = ProjectUserStatusChoice.objects.get(name="Removed")
+        project_user.save()
+
+    def get_absolute_url(self):
+        return reverse("project-detail", kwargs={"pk": self.pk})
 
 
 class ProjectAdminComment(TimeStampedModel):

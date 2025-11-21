@@ -7,9 +7,11 @@ import logging
 from ast import literal_eval
 from enum import Enum
 
+from django.contrib.auth import get_user_model
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.urls import reverse
 from django.utils.html import escape, format_html
 from django.utils.module_loading import import_string
 from django.utils.safestring import SafeString
@@ -17,6 +19,7 @@ from model_utils.models import TimeStampedModel
 from simple_history.models import HistoricalRecords
 
 import coldfront.core.attribute_expansion as attribute_expansion
+from coldfront.core.allocation.signals import allocation_remove_user
 from coldfront.core.project.models import Project, ProjectPermission
 from coldfront.core.resource.models import Resource
 from coldfront.core.utils.common import import_from_settings
@@ -352,6 +355,30 @@ class Allocation(TimeStampedModel):
                     return res.get_attribute(name="eula")
         else:
             return None
+
+    def remove_user(self, user, signal_sender=None):
+        """
+        Marks an `AllocationUser` as 'Removed' and sends the `allocation_remove_user`signal.
+
+        Quietly fails if the AllocationUser does not exist.
+
+        Params:
+            user (User|AllocationUser): User to remove.
+            singal_sender (str): Sender for the `allocation_remove_user` signal.
+        """
+        if isinstance(user, AllocationUser):
+            allocation_user = user
+        elif isinstance(user, get_user_model()):
+            try:
+                allocation_user = self.allocationuser_set.get(user=user)
+            except AllocationUser.DoesNotExist:
+                return
+        allocation_user.status = AllocationUserStatusChoice.objects.get(name="Removed")
+        allocation_user.save()
+        allocation_remove_user.send(sender=signal_sender, allocation_user_pk=allocation_user.pk)
+
+    def get_absolute_url(self):
+        return reverse("allocation-detail", kwargs={"pk": self.pk})
 
 
 class AllocationAdminNote(TimeStampedModel):
@@ -721,6 +748,9 @@ class AllocationChangeRequest(TimeStampedModel):
 
     def __str__(self):
         return "%s (%s)" % (self.get_parent_resource.name, self.allocation.project.pi)
+
+    def get_absolute_url(self):
+        return reverse("allocation-change-detail", kwargs={"pk": self.pk})
 
 
 class AllocationAttributeChangeRequest(TimeStampedModel):
