@@ -16,7 +16,7 @@ from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db.models import Q
 from django.db.models.query import QuerySet
 from django.http import HttpResponseBadRequest, HttpResponseRedirect, JsonResponse
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, redirect
 from django.template.defaultfilters import pluralize
 from django.urls import reverse, reverse_lazy
 from django.views import View
@@ -71,11 +71,9 @@ from coldfront.core.project.models import Project, ProjectPermission
 from coldfront.core.resource.models import Resource
 from coldfront.core.utils.common import get_domain_url, import_from_settings
 from coldfront.core.utils.mail import (
-    build_link,
     send_allocation_admin_email,
     send_allocation_customer_email,
     send_allocation_eula_customer_email,
-    send_email_template,
 )
 from coldfront.core.utils.mixins.views import AllocationInContextView
 from coldfront.core.utils.views import FormErrorsInMessagesMixin, ModelFormSetView
@@ -205,7 +203,7 @@ class AllocationDetailView(LoginRequiredMixin, UserPassesTestMixin, DetailView, 
         self.object = self.get_object()
         if not self.request.user.is_superuser:
             messages.success(request, "You do not have permission to update the allocation")
-            return HttpResponseRedirect(self.object.get_absolute_url())
+            return redirect(self.object)
 
         action = request.POST.get("action")
         if action not in ["update", "approve", "auto-approve", "deny"]:
@@ -381,8 +379,7 @@ class AllocationEULAView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
                             cc_managers=EMAIL_ALLOCATION_EULA_CONFIRMATIONS_CC_MANAGERS,
                             include_eula=EMAIL_ALLOCATION_EULA_INCLUDE_ACCEPTED_EULA,
                         )
-                if allocation_obj.status == AllocationStatusChoice.objects.get(name="Active"):
-                    allocation_activate_user.send(sender=self.__class__, allocation_user_pk=allocation_user_obj.pk)
+                allocation_obj.activate_user(allocation_user_obj, signal_sender=self.__class__)
             elif action == "declined_eula":
                 allocation_user_obj.status = AllocationUserStatusChoice.objects.get(name="DeclinedEULA")
                 messages.warning(
@@ -705,7 +702,7 @@ class AllocationUsersAddView(LoginRequiredMixin, UserPassesTestMixin, Allocation
             message = f"You cannot add users to an allocation with status {allocation_obj.status.name}."
         if message:
             messages.error(request, message)
-            return HttpResponseRedirect(reverse("allocation-detail", kwargs={"pk": allocation_obj.pk}))
+            return redirect(allocation_obj)
         return super().dispatch(request, *args, **kwargs)
 
     def get_formset_queryset(self):
@@ -772,23 +769,7 @@ class AllocationUsersAddView(LoginRequiredMixin, UserPassesTestMixin, Allocation
         redirect = super().formset_valid(formset)
         allocation_users = self.objects
         for allocation_user in allocation_users:
-            if allocation_user.status.name == "Active":
-                allocation_activate_user.send(sender=self.__class__, allocation_user_pk=allocation_user.pk)
-            elif allocation_user.status.name == "PendingEULA":
-                send_email_template(
-                    f"Agree to EULA for {self.allocation.get_parent_resource.__str__()}",
-                    "email/allocation_agree_to_eula.txt",
-                    {
-                        "resource": self.allocation.get_parent_resource,
-                        "url": build_link(
-                            reverse("allocation-review-eula", kwargs={"pk": self.allocation.pk}),
-                            domain_url=get_domain_url(self.request),
-                        ),
-                    },
-                    self.request.user.email,
-                    [allocation_user.user],
-                )
-
+            self.allocation.add_user(allocation_user.user, signal_sender=self.__class__)
         users_added_count = len(allocation_users)
         messages.success(self.request, f"Added {users_added_count} user{pluralize(users_added_count)} to allocation.")
         return redirect
@@ -823,7 +804,7 @@ class AllocationUsersRemoveView(LoginRequiredMixin, UserPassesTestMixin, Allocat
             message = f"You cannot remove users from a allocation with status {allocation_obj.status.name}."
         if message:
             messages.error(request, message)
-            return HttpResponseRedirect(reverse("allocation-detail", kwargs={"pk": allocation_obj.pk}))
+            return redirect(allocation_obj)
         return super().dispatch(request, *args, **kwargs)
 
     def get_formset_queryset(self):
@@ -895,6 +876,7 @@ class AllocationAttributeCreateView(LoginRequiredMixin, UserPassesTestMixin, Cre
         return initial
 
     def get_success_url(self):
+        # can probably be replaced with `return self.object.allocation.get_absolute_url()`
         return reverse("allocation-detail", kwargs={"pk": self.kwargs.get("pk")})
 
 
@@ -1026,6 +1008,7 @@ class AllocationNoteCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateVi
         return form
 
     def get_success_url(self):
+        # can probably be replaced with `return self.object.allocation.get_absolute_url()`
         return reverse("allocation-detail", kwargs={"pk": self.kwargs.get("pk")})
 
 
@@ -1088,26 +1071,24 @@ class AllocationRenewView(LoginRequiredMixin, UserPassesTestMixin, AllocationInC
 
     def dispatch(self, request, *args, **kwargs):
         allocation_obj = get_object_or_404(Allocation, pk=self.kwargs.get("pk"))
-        allocation_redirect = HttpResponseRedirect(reverse("allocation-detail", kwargs={"pk": allocation_obj.pk}))
-        project_redirect = HttpResponseRedirect(reverse("project-detail", kwargs={"pk": allocation_obj.project.pk}))
         if not ALLOCATION_ENABLE_ALLOCATION_RENEWAL:
             messages.error(
                 request,
                 "Allocation renewal is disabled. Request a new allocation to this resource if you want to continue using it after the active until date.",
             )
-            return allocation_redirect
+            return redirect(allocation_obj)
 
         if allocation_obj.status.name not in ["Active"]:
             messages.error(request, f"You cannot renew a allocation with status {allocation_obj.status.name}.")
-            return allocation_redirect
+            return redirect(allocation_obj)
 
         if allocation_obj.project.needs_review:
             messages.error(request, "You cannot renew your allocation because you have to review your project first.")
-            return project_redirect
+            return redirect(allocation_obj.project)
 
         if allocation_obj.expires_in > 60:
             messages.error(request, "It is too soon to review your allocation.")
-            return allocation_redirect
+            return redirect(allocation_obj)
 
         return super().dispatch(request, *args, **kwargs)
 
@@ -1620,18 +1601,18 @@ class AllocationChangeView(
             messages.error(
                 request, "You cannot request a change to this allocation because you have to review your project first."
             )
-            return HttpResponseRedirect(reverse("allocation-detail", kwargs={"pk": allocation_obj.pk}))
+            return redirect(allocation_obj)
 
         if allocation_obj.project.status.name not in [
             "Active",
             "New",
         ]:
             messages.error(request, "You cannot request a change to an allocation in an archived project.")
-            return HttpResponseRedirect(reverse("allocation-detail", kwargs={"pk": allocation_obj.pk}))
+            return redirect(allocation_obj)
 
         if allocation_obj.is_locked:
             messages.error(request, "You cannot request a change to a locked allocation.")
-            return HttpResponseRedirect(reverse("allocation-detail", kwargs={"pk": allocation_obj.pk}))
+            return redirect(allocation_obj)
 
         if allocation_obj.status.name not in [
             "Active",
@@ -1643,7 +1624,7 @@ class AllocationChangeView(
             messages.error(
                 request, f'You cannot request a change to an allocation with status "{allocation_obj.status.name}".'
             )
-            return HttpResponseRedirect(reverse("allocation-detail", kwargs={"pk": allocation_obj.pk}))
+            return redirect(allocation_obj)
 
         return super().dispatch(request, *args, **kwargs)
 
