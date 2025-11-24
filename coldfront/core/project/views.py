@@ -23,14 +23,10 @@ from django.views.generic import CreateView, DetailView, ListView, UpdateView
 from django.views.generic.base import TemplateView
 from django.views.generic.edit import FormView
 
-from coldfront.config.core import ALLOCATION_EULA_ENABLE
 from coldfront.core.allocation.models import (
     Allocation,
     AllocationStatusChoice,
-    AllocationUser,
-    AllocationUserStatusChoice,
 )
-from coldfront.core.allocation.signals import allocation_activate_user
 from coldfront.core.allocation.utils import generate_guauge_data_from_usage
 from coldfront.core.grant.models import Grant
 from coldfront.core.project.forms import (
@@ -58,7 +54,6 @@ from coldfront.core.project.models import (
     ProjectUserStatusChoice,
 )
 from coldfront.core.project.signals import (
-    project_activate_user,
     project_archive,
     project_new,
     project_update,
@@ -830,11 +825,6 @@ class ProjectAddUsersView(LoginRequiredMixin, UserPassesTestMixin, View):
 
         added_users_count = 0
         if formset.is_valid() and allocation_formset.is_valid():
-            project_user_active_status_choice = ProjectUserStatusChoice.objects.get(name="Active")
-            allocation_user_active_status_choice = AllocationUserStatusChoice.objects.get(name="Active")
-            if ALLOCATION_EULA_ENABLE:
-                allocation_user_pending_status_choice = AllocationUserStatusChoice.objects.get(name="PendingEULA")
-
             allocations_selected_objs = Allocation.objects.filter(
                 pk__in=[
                     allocation_form.cleaned_data.get("pk")
@@ -855,46 +845,10 @@ class ProjectAddUsersView(LoginRequiredMixin, UserPassesTestMixin, View):
                     user_obj.save()
 
                     role_choice = user_form_data.get("role")
-                    # Is the user already in the project?
-                    if project_obj.projectuser_set.filter(user=user_obj).exists():
-                        project_user_obj = project_obj.projectuser_set.get(user=user_obj)
-                        project_user_obj.role = role_choice
-                        project_user_obj.status = project_user_active_status_choice
-                        project_user_obj.save()
-                    else:
-                        project_user_obj = ProjectUser.objects.create(
-                            user=user_obj,
-                            project=project_obj,
-                            role=role_choice,
-                            status=project_user_active_status_choice,
-                        )
-
-                    # project signals
-                    project_activate_user.send(sender=self.__class__, project_user_pk=project_user_obj.pk)
+                    project_obj.add_user(user_obj, role_choice, signal_sender=self.__class__)
 
                     for allocation in allocations_selected_objs:
-                        has_eula = allocation.get_eula()
-                        user_status_choice = allocation_user_active_status_choice
-                        if allocation.allocationuser_set.filter(user=user_obj).exists():
-                            allocation_user_obj = allocation.allocationuser_set.get(user=user_obj)
-                            if (
-                                ALLOCATION_EULA_ENABLE
-                                and has_eula
-                                and (allocation_user_obj.status != allocation_user_active_status_choice)
-                            ):
-                                user_status_choice = allocation_user_pending_status_choice
-                            allocation_user_obj.status = user_status_choice
-                            allocation_user_obj.save()
-                        else:
-                            if ALLOCATION_EULA_ENABLE and has_eula:
-                                user_status_choice = allocation_user_pending_status_choice
-                            allocation_user_obj = AllocationUser.objects.create(
-                                allocation=allocation, user=user_obj, status=user_status_choice
-                            )
-                        if user_status_choice == allocation_user_active_status_choice:
-                            allocation_activate_user.send(
-                                sender=self.__class__, allocation_user_pk=allocation_user_obj.pk
-                            )
+                        allocation.add_user(user_obj, signal_sender=self.__class__)
 
             messages.success(request, "Added {} users to project.".format(added_users_count))
         else:

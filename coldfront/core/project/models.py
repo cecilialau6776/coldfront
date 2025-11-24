@@ -15,7 +15,7 @@ from model_utils.models import TimeStampedModel
 from simple_history.models import HistoricalRecords
 
 from coldfront.core.field_of_science.models import FieldOfScience
-from coldfront.core.project.signals import project_remove_user
+from coldfront.core.project.signals import project_activate_user, project_remove_user
 from coldfront.core.utils.common import import_from_settings
 from coldfront.core.utils.validate import AttributeValidator
 
@@ -245,6 +245,30 @@ We do not have information about your research. Please provide a detailed descri
 
     def natural_key(self):
         return (self.title,) + self.pi.natural_key()
+
+    def add_user(self, user, role_choice, signal_sender=None):
+        """
+        Adds a user to the project.
+
+        If a ProjectUser already exists, its role will be set to "Active" and its role updated.
+        Otherwise, creates a new ProjectUser.
+
+        Params:
+            user (User): User to add.
+            role_choice (ProjetUserRoleChoice): Role to give the project user.
+            singal_sender (str): Sender for the `project_activate_user` signal.
+        """
+        user_status_obj = ProjectUserStatusChoice.objects.get(name="Active")
+
+        project_user, _created = self.projectuser_set.update_or_create(
+            user=user,
+            defaults={
+                "status": user_status_obj,
+                "role": role_choice,
+            },
+        )
+
+        project_activate_user.send(sender=signal_sender, project_user_pk=project_user.pk)
 
     def remove_user(self, user, signal_sender=None):
         """
