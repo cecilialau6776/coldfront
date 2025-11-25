@@ -366,7 +366,7 @@ class Allocation(TimeStampedModel):
 
         Params:
             user (AllocationUser): User to activate.
-            singal_sender (str): Sender for the `allocation_activate_user` signal.
+            signal_sender (str): Sender for the `allocation_activate_user` signal.
         """
         user.status = AllocationUserStatusChoice.objects.get(name="Active")
         user.save()
@@ -384,10 +384,11 @@ class Allocation(TimeStampedModel):
 
         Params:
             user (User): User to add.
-            singal_sender (str): Sender for the `allocation_activate_user` signal.
+            signal_sender (str): Sender for the `allocation_activate_user` signal.
         """
         user_status = "Active"
-        is_pending_eula = ALLOCATION_EULA_ENABLE and not user.userprofile.is_pi and self.get_eula()
+
+        is_pending_eula = ALLOCATION_EULA_ENABLE and self.get_eula() and not user.userprofile.is_pi
         if is_pending_eula:
             user_status = "PendingEULA"
         user_status_obj = AllocationUserStatusChoice.objects.get(name=user_status)
@@ -419,7 +420,7 @@ class Allocation(TimeStampedModel):
 
         Params:
             user (User|AllocationUser): User to remove.
-            singal_sender (str): Sender for the `allocation_remove_user` signal.
+            signal_sender (str): Sender for the `allocation_remove_user` signal.
         """
         if isinstance(user, AllocationUser):
             allocation_user = user

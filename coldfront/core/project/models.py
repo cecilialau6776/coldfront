@@ -256,7 +256,7 @@ We do not have information about your research. Please provide a detailed descri
         Params:
             user (User): User to add.
             role_choice (ProjetUserRoleChoice): Role to give the project user.
-            singal_sender (str): Sender for the `project_activate_user` signal.
+            signal_sender (str): Sender for the `project_activate_user` signal.
         """
         user_status_obj = ProjectUserStatusChoice.objects.get(name="Active")
 
@@ -276,7 +276,7 @@ We do not have information about your research. Please provide a detailed descri
 
         Params:
             user (User|ProjectUser): User to remove.
-            singal_sender (str): Sender for the `project_remove_user` and `allocation_remove_user` signals.
+            signal_sender (str): Sender for the `project_remove_user` and `allocation_remove_user` signals.
 
         Raises:
             ProjectUser.DoesNotExist: If `user` is a `User` and that user is not found in the Project.
