@@ -396,7 +396,7 @@ class Allocation(TimeStampedModel):
                 [user.email],
             )
 
-        if self.status.name == "Active":
+        if self.status.name == "Active" and allocation_user.status.name == "Active":
             allocation_activate_user.send(sender=signal_sender, allocation_user_pk=allocation_user.pk)
 
     def remove_user(self, user, signal_sender=None):
