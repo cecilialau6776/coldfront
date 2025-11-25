@@ -59,6 +59,7 @@ from coldfront.core.allocation.models import (
 )
 from coldfront.core.allocation.signals import (
     allocation_activate,
+    allocation_activate_user,
     allocation_attribute_changed,
     allocation_change_approved,
     allocation_change_created,
@@ -269,7 +270,7 @@ class AllocationDetailView(LoginRequiredMixin, UserPassesTestMixin, TemplateView
                 status__name__in=["Removed", "Error", "DeclinedEULA", "PendingEULA"]
             )
             for allocation_user in allocation_users:
-                allocation_obj.activate_user(allocation_user, signal_sender=self.__class__)
+                allocation_activate_user.send(sender=self.__class__, allocation_user_pk=allocation_user.pk)
 
             send_allocation_customer_email(
                 allocation_obj,
@@ -402,7 +403,8 @@ class AllocationEULAView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
                             cc_managers=EMAIL_ALLOCATION_EULA_CONFIRMATIONS_CC_MANAGERS,
                             include_eula=EMAIL_ALLOCATION_EULA_INCLUDE_ACCEPTED_EULA,
                         )
-                allocation_obj.activate_user(allocation_user_obj, signal_sender=self.__class__)
+                if allocation_obj.status == AllocationStatusChoice.objects.get(name="Active"):
+                    allocation_activate_user.send(sender=self.__class__, allocation_user_pk=allocation_user_obj.pk)
             elif action == "declined_eula":
                 allocation_user_obj.status = AllocationUserStatusChoice.objects.get(name="DeclinedEULA")
                 messages.warning(

@@ -360,19 +360,6 @@ class Allocation(TimeStampedModel):
         else:
             return None
 
-    def activate_user(self, user, signal_sender=None):
-        """
-        Marks an `AllocationUser` as "Active". If this allocation is active, also sends `allocation_activate_user` signal.
-
-        Params:
-            user (AllocationUser): User to activate.
-            signal_sender (str): Sender for the `allocation_activate_user` signal.
-        """
-        user.status = AllocationUserStatusChoice.objects.get(name="Active")
-        user.save()
-        if self.status.name == "Active":
-            allocation_activate_user.send(sender=signal_sender, allocation_user_pk=user.pk)
-
     def add_user(self, user, signal_sender=None):
         """
         Adds a user to the allocation.
