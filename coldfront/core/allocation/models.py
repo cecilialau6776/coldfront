@@ -399,15 +399,14 @@ class Allocation(TimeStampedModel):
         if self.status.name == "Active" and allocation_user.status.name == "Active":
             allocation_activate_user.send(sender=signal_sender, allocation_user_pk=allocation_user.pk)
 
-    def remove_user(self, user, signal_sender=None):
+    def remove_user(self, user, signal_sender=None, ignore_user_not_found=True):
         """
         Marks an `AllocationUser` as 'Removed' and sends the `allocation_remove_user` signal.
-
-        Quietly fails if the AllocationUser does not exist.
 
         Params:
             user (User|AllocationUser): User to remove.
             signal_sender (str): Sender for the `allocation_remove_user` signal.
+            ignore_user_not_found (bool):
         """
         if isinstance(user, AllocationUser):
             allocation_user = user
@@ -415,7 +414,13 @@ class Allocation(TimeStampedModel):
             try:
                 allocation_user = self.allocationuser_set.get(user=user)
             except AllocationUser.DoesNotExist:
-                return
+                if ignore_user_not_found:
+                    logger.warn(
+                        f"Cannot remove user={str(user)} for allocation pk={self.pk} - AllocationUser not found."
+                    )
+                    return
+                else:
+                    raise
         allocation_user.status = AllocationUserStatusChoice.objects.get(name="Removed")
         allocation_user.save()
         allocation_remove_user.send(sender=signal_sender, allocation_user_pk=allocation_user.pk)

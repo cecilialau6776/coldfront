@@ -65,6 +65,7 @@ from coldfront.core.allocation.signals import (
     allocation_change_created,
     allocation_disable,
     allocation_new,
+    allocation_remove_user,
 )
 from coldfront.core.allocation.utils import generate_guauge_data_from_usage, get_user_resources
 from coldfront.core.project.models import Project, ProjectPermission
@@ -290,7 +291,7 @@ class AllocationDetailView(LoginRequiredMixin, UserPassesTestMixin, TemplateView
                 allocation_disable.send(sender=self.__class__, allocation_pk=allocation_obj.pk)
                 allocation_users = allocation_obj.allocationuser_set.exclude(status__name__in=["Removed", "Error"])
                 for allocation_user in allocation_users:
-                    allocation_obj.remove_user(allocation_user, signal_sender=self.__class__)
+                    allocation_remove_user.send(sender=self.__class__, allocation_user_pk=allocation_user.pk)
             if allocation_obj.status.name == "Denied":
                 send_allocation_customer_email(
                     allocation_obj,
