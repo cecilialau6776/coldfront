@@ -298,8 +298,12 @@ class AllocationCreateViewTest(AllocationViewBaseTest):
         self.client.force_login(self.pi_user)
         self.post_data = {
             "justification": "test justification",
-            "quantity": "1",
-            "resource": f"{self.allocation.resources.first().pk}",
+            "quantity": 10,
+            "resource": self.allocation.resources.first().pk,
+            "project": self.project.pk,
+            "is_changeable": True,
+            "users": [self.proj_nonallocation_user.pk],
+            "allocation_account": [],
         }
 
     def test_allocationcreateview_access(self):
@@ -315,6 +319,9 @@ class AllocationCreateViewTest(AllocationViewBaseTest):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Allocation requested.")
         self.assertEqual(len(self.project.allocation_set.all()), 2)
+        new_allocation = self.project.allocation_set.last()
+        self.assertEqual(len(new_allocation.resources.all()), 1)
+        self.assertEqual(len(new_allocation.allocationuser_set.all()), 1)
 
     def test_allocationcreateview_post_zeroquantity(self):
         """Test POST to the AllocationCreateView"""
@@ -324,6 +331,9 @@ class AllocationCreateViewTest(AllocationViewBaseTest):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Allocation requested.")
         self.assertEqual(len(self.project.allocation_set.all()), 2)
+        new_allocation = self.project.allocation_set.last()
+        self.assertEqual(len(new_allocation.resources.all()), 1)
+        self.assertEqual(len(new_allocation.allocationuser_set.all()), 1)
 
 
 class AllocationAddUsersViewTest(AllocationViewBaseTest):
