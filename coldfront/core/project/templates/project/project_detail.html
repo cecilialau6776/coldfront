@@ -487,7 +487,7 @@ Project Detail
 <!-- Start Admin Messages -->
 <div class="card mb-3">
   <div class="card-header">
-    <h3 class="d-inline"><i class="fas fa-users" aria-hidden="true"></i> Notifications </h3> <span class="badge badge-secondary">{{project.projectusermessage_set.count}}</span>
+    <h3 class="d-inline"><i class="fas fa-users" aria-hidden="true"></i> Notifications </h3> <span class="badge badge-secondary">{{notes.count}}</span>
     <div class="float-right">
       {% if request.user.is_superuser %}
         <a class="btn btn-success" href="{% url 'project-note-add' project.pk %}" role="button">
@@ -497,8 +497,7 @@ Project Detail
     </div>
   </div>
   <div class="card-body">
-    {% with project.projectusermessage_set.all as all_messages %}
-    {% if all_messages %}
+    {% if notes %}
       <div class="table-responsive">
         <table class="table table-hover">
           <thead>
@@ -509,7 +508,7 @@ Project Detail
             </tr>
           </thead>
           <tbody>
-            {% for message in all_messages %}
+            {% for message in notes %}
               {% if not message.is_private or request.user.is_superuser %}
             <tr>
               <td>{{ message.message }}</td>
@@ -524,7 +523,6 @@ Project Detail
     {% else %}
       <div class="alert alert-info" role="alert"><i class="fas fa-info-circle" aria-hidden="true"></i> There are no messages from system administrators.</div>
     {% endif %}
-    {% endwith %}
   </div>
 </div>
 <!-- End Admin Messages -->

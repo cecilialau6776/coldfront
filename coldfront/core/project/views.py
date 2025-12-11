@@ -198,6 +198,9 @@ class ProjectDetailView(LoginRequiredMixin, UserPassesTestMixin, DetailView):
             if allocation_user:
                 user_status.append(allocation_user.first().status.name)
 
+        note_set = project_obj.projectusermessage_set
+        notes = note_set.all() if self.request.user.is_superuser else note_set.filter(is_private=False)
+        context["notes"] = notes
         context["publications"] = (
             Publication.objects.select_related("source").filter(project=project_obj, status="Active").order_by("-year")
         )
