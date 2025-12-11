@@ -125,6 +125,7 @@ The following settings are ColdFront specific settings related to the core appli
 | PROJECT_CODE | Specifies a custom internal project identifier. Default False, provide string value to enable. Must be no longer than 10 - PROJECT_CODE_PADDING characters in length. | yes | yes |
 | PROJECT_CODE_PADDING | Defines a optional padding value to be added before the Primary Key section of PROJECT_CODE. Default False, provide integer value to enable. | yes | yes |
 | PROJECT_INSTITUTION_EMAIL_MAP | Defines a dictionary where PI domain email addresses are keys and their corresponding institutions are values. Default is False, provide key-value pairs to enable this feature. | yes | yes |
+| PROJECT_UPDATE_FIELDS | Defines a list of Project fields that project managers are able to update. Default is ['title', 'description', 'field_of_science']. | yes | yes |
 | ACCOUNT_CREATION_TEXT                        |                                                                                                       | yes         | yes                      |
 | ADDITIONAL_USER_SEARCH_CLASSES               |                                                                                                       | yes         | no                       |
 | ADMIN_COMMENTS_SHOW_EMPTY                    |                                                                                                       | no          | yes                      |
