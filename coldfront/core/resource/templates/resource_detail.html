@@ -165,11 +165,11 @@ Resource Detail
   $(document).ready(function () { 
     $('#child_resource_table').DataTable({
       lengthMenu: [5, 10, 20, 50, 100],
-      "pageLength": 5,
-      "ordering": false,
-      'aoColumnDefs': [{
-        'bSortable': false,
-        'aTargets': ['nosort']
+      pageLength: 5,
+      ordering: false,
+      columnDefs: [{
+        orderable: false,
+        targets: ["nosort"]
       }]
     });
   });

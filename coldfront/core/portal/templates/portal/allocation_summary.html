@@ -35,12 +35,10 @@
   $(document).ready(function () {
     drawAllocations();
     drawResources();
-    $('#resource-table').DataTable({
-      "iDisplayLength": 10,
-      "bSortClasses": false,
-      "order": [
-        [1, "desc"]
-      ]
+    $("#resource-table").DataTable({
+      pageLength: 10,
+      orderClasses: false,
+      order: [[1, "desc"]]
     });
   });
 

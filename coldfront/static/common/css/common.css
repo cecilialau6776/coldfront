@@ -147,3 +147,11 @@ body > main > div > div.card.border-primary > div.card-body > form > div.alert.a
 }
 
 .form-control[readonly]{background-color:#ffffff;opacity:1}
+
+/* datatables2 margin bug fix */
+/* looks like the original margin: 0; is overriding margin-bottom: .5rem; so we lose the margin between layout rows */
+div.table-responsive > div.dt-container > div.row {
+    margin-left: 0;
+    margin-right: 0;
+    margin-bottom: 0.5rem;
+}

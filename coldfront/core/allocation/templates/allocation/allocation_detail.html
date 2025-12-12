@@ -352,7 +352,7 @@ Allocation Detail
             <th scope="col" class="text-nowrap">Last Name</th>
             <th scope="col" class="text-nowrap">Email</th>
             <th scope="col" class="text-nowrap" >Status</th>
-            <th scope="col" class="nosort">Last Modified</th>
+            <th scope="col" data-dt-order="disable">Last Modified</th>
           </tr>
         </thead>
         <tbody>
@@ -436,19 +436,10 @@ Allocation Detail
 
     $('#allocation_change_table').DataTable({
       lengthMenu: [5, 10, 20, 50, 100],
-      "pageLength": 5,
-      "ordering": false,
-      'aoColumnDefs': [{
-        'bSortable': false,
-        'aTargets': ['nosort']
-      }]
+      pageLength: 5,
+      ordering: false,
     });
-    $('#allocationuser_table').DataTable({
-      'aoColumnDefs': [{
-        'bSortable': false,
-        'aTargets': ['nosort']
-      }]
-    });
+    $('#allocationuser_table').DataTable();
   });
 
   function drawGauges(guage_data) {

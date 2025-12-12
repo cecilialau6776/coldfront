@@ -74,11 +74,10 @@ Grants Report
   $("#navbar-grant-report").addClass("active")
   $(document).ready(function() {
     $('#grants-table').DataTable({
-      "iDisplayLength": 50,
-      "bSortClasses": false,
-      "order": [[ 5, "desc" ]],
-      "columnDefs": [{ 'orderable': false, 'targets': 0 }],
-      "aaSorting": [[1, 'asc']] 
+      pageLength: 50,
+      orderClasses: false,
+      order: [[ 5, "desc" ], [ 1, "asc" ]],
+      columnDefs: [{ orderable: false, targets: 0 }]
     });
   });
 

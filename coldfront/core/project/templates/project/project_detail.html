@@ -113,8 +113,8 @@ Project Detail
             <th scope="col" class="text-nowrap">Email</th>
             <th scope="col" class="text-nowrap">Role <a href="#" data-toggle="popover" title="Role" data-trigger="hover" data-content="Manager role grants user access to add/remove users, allocations, grants, and publications to the project."><i class="fas fa-info-circle" aria-hidden="true"></i><span class="sr-only">Manager role grants user access to add/remove users, allocations, grants, and publications to the project.</span></a></th>
             <th scope="col" class="text-nowrap">Status</th>
-            <th scope="col" class="nosort"><input type="checkbox" class="check" id="selectAll" style="margin-right: 5px;">Enable Notifications <a href="#" title="Enable Notifications" data-toggle="popover" data-trigger="hover" data-content="When disabled, user will not receive notifications for allocation requests and expirations or cloud usage (if applicable)."><i class="fas fa-info-circle" aria-hidden="true"></i><span class="sr-only">When disabled, user will not receive notifications for allocation requests and expirations or cloud usage (if applicable).</span></a></th>
-            <th scope="col" class="nosort">Actions</th>
+            <th scope="col" data-dt-order="disable"><input type="checkbox" class="check" id="selectAll" style="margin-right: 5px;">Enable Notifications <a href="#" title="Enable Notifications" data-toggle="popover" data-trigger="hover" data-content="When disabled, user will not receive notifications for allocation requests and expirations or cloud usage (if applicable)."><i class="fas fa-info-circle" aria-hidden="true"></i><span class="sr-only">When disabled, user will not receive notifications for allocation requests and expirations or cloud usage (if applicable).</span></a></th>
+            <th scope="col" data-dt-order="disable">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -190,7 +190,7 @@ Project Detail
               <th scope="col">Information</th>
               <th scope="col">Status</th>
               <th scope="col">End Date</th>
-              <th scope="col" class="nosort">Actions</th>
+              <th scope="col" data-dt-order="disable">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -274,7 +274,7 @@ Project Detail
               <th scope="col">Attribute Type</th>
               <th scope="col">Attribute Value</th>
               {% if is_allowed_to_update_project %}
-              <th scope="col" class="nosort">Actions</th>
+              <th scope="col" data-dt-order="disable">Actions</th>
               {% endif %}
             </tr>
           </thead>
@@ -352,7 +352,7 @@ Project Detail
               <th scope="col" class="text-nowrap">Grant Start Date</th>
               <th scope="col" class="text-nowrap">Grant End Date</th>
               <th scope="col" class="text-nowrap">Status</th>
-              <th scope="col" class="nosort">Actions</th>
+              <th scope="col" data-dt-order="disable">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -550,38 +550,23 @@ Project Detail
   $(document).ready(function(){
     $('[data-toggle="popover"]').popover();
 
-    var guage_data = JSON.parse(document.getElementById('guage-data').textContent);
+    var guage_data = JSON.parse(document.getElementById("guage-data").textContent);
     drawGauges(guage_data);
 
-    $('#publication-table').DataTable({
-      "aLengthMenu": [
+    $("#publication-table").DataTable({
+      lengthMenu: [
         [10, 25, 50, 100, -1],
         [10, 25, 50, 100, "All"]],
-      "iDisplayLength": 25,
-      "bSortClasses": false,
-      "order": [[ 1, "desc" ]]
+      pageLength: 25,
+      orderClasses: false,
+      order: [[ 1, "desc" ]]
     });
 
-    $('#allocation_table').DataTable({
-      'aoColumnDefs': [{
-        'bSortable': false,
-        'aTargets': ['nosort']
-      }]
-    });
+    $("#allocation_table").DataTable();
 
-    $('#grant_table').DataTable({
-      'aoColumnDefs': [{
-        'bSortable': false,
-        'aTargets': ['nosort']
-      }]
-    });
+    $("#grant_table").DataTable();
 
-    $('#projectuser_table').DataTable({
-      'aoColumnDefs': [{
-        'bSortable': false,
-        'aTargets': ['nosort']
-      }]
-    });
+    $("#projectuser_table").DataTable();
 
     $("#selectAll").click(function () {
       $("input[id^='email_notifications_for_user_id_']").not(":disabled").prop('checked', $(this).prop('checked')).change();
