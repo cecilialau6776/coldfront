@@ -212,6 +212,10 @@ class TestProjectAttribute(TestCase):
         with self.assertRaises(ValidationError):
             new_attr.clean()
 
+    def test_get_attribute(self):
+        self.assertEqual(self.project.get_attribute("Account Number"), 1243)
+        self.assertEqual(self.project.get_attribute("Account Number", typed=False), "1243")
+
 
 class TestProjectCode(TransactionTestCase):
     """Tear down database after each run to prevent conflicts across cases"""

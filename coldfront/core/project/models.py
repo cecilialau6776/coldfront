@@ -14,6 +14,7 @@ from django.urls import reverse
 from model_utils.models import TimeStampedModel
 from simple_history.models import HistoricalRecords
 
+import coldfront.core.attribute_expansion as attribute_expansion
 from coldfront.core.field_of_science.models import FieldOfScience
 from coldfront.core.project.signals import project_activate_user, project_archive, project_remove_user
 from coldfront.core.utils.common import import_from_settings
@@ -331,6 +332,23 @@ We do not have information about your research. Please provide a detailed descri
 
         project_archive.send(sender=self.__class__, project_obj=self)
 
+    def get_attribute(self, name, typed=True):
+        """
+        Params:
+            name (str): name of the project attribute type
+            typed (bool): indicates whether or not to convert the attribute value to an int/ float/ str based on the base AttributeType name
+
+        Returns:
+            str: the value of the first attribute found for this allocation with the specified name
+        """
+        attr = self.projectattribute_set.filter(proj_attr_type__name=name).first()
+        if not attr:
+            return None
+        if typed:
+            return attr.typed_value()
+        else:
+            return attr.value
+
     def get_absolute_url(self):
         return reverse("project-detail", kwargs={"pk": self.pk})
 
@@ -598,6 +616,16 @@ class ProjectAttribute(TimeStampedModel):
             validator.validate_yes_no()
         elif expected_value_type == "Date":
             validator.validate_date()
+
+    def typed_value(self):
+        """
+        Returns:
+            int, float, str: the value of the attribute with proper type and is used for computing expanded_value() (coerced into int or float for attributes with Int or Float types; if it fails or the attribute is of any other type, it is coerced into a str)
+        """
+
+        raw_value = self.value
+        atype_name = self.proj_attr_type.attribute_type.name
+        return attribute_expansion.convert_type(value=raw_value, type_name=atype_name)
 
     def __str__(self):
         return "%s" % (self.proj_attr_type.name)
