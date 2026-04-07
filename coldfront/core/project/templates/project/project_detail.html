@@ -528,6 +528,42 @@ Project Detail
   </div>
 </div>
 <!-- End Admin Messages -->
+
+<!-- Start Admin Comments -->
+{% if request.user.is_superuser %}
+<div class="card mb-3">
+    <div class="card-header">
+        <h3 class="d-inline"><i class="fas fa-lock" aria-hidden="true"></i><i class="fas fa-note-sticky" aria-hidden="true"></i> Admin Notes </h3>
+        <span class="badge bg-secondary">{{admin_notes.count}}</span>
+        <div class="float-end">
+            <a class="btn btn-primary" href="{% url 'project-admin-comment-create' project.pk %}" role="button">
+                <i class="fas fa-plus" aria-hidden="true"></i> Add Admin Note
+            </a>
+        </div>
+    </div>
+    <div class="card-body">
+        <ul class="list-group">
+            {% for note in admin_notes %}
+            <li class="list-group-item">
+                <div>
+                    <div>
+                        <span class="text-secondary">{{ note.author.username }}</span>
+                        <span class="float-end text-secondary">{{ note.created }}</span>
+                    </div>
+                    <p class="mb-0">
+                        {{ note.comment }}
+                    </p>
+                </div>
+            </li>
+            {% empty %}
+            <div class="alert alert-info" role="alert"><i class="fas fa-info-circle" aria-hidden="true"></i> There are no admin notes.</div>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endif %}
+<!-- End Admin Comments  -->
+
 {% endblock %}
 
 {% block javascript %}
