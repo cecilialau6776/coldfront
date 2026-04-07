@@ -41,6 +41,7 @@ from coldfront.core.project.forms import (
 )
 from coldfront.core.project.models import (
     Project,
+    ProjectAdminComment,
     ProjectAttribute,
     ProjectReview,
     ProjectReviewStatusChoice,
@@ -198,6 +199,10 @@ class ProjectDetailView(LoginRequiredMixin, UserPassesTestMixin, DetailView):
 
         note_set = project_obj.projectusermessage_set
         notes = note_set.all() if self.request.user.is_superuser else note_set.filter(is_private=False)
+
+        if self.request.user.is_superuser:
+            context["admin_notes"] = project_obj.projectadmincomment_set.order_by("-modified")
+
         context["notes"] = notes
         context["publications"] = (
             Publication.objects.select_related("source").filter(project=project_obj, status="Active").order_by("-year")
@@ -1583,3 +1588,51 @@ class ProjectAttributeUpdateView(LoginRequiredMixin, UserPassesTestMixin, Templa
                         kwargs={"pk": project_obj.pk, "project_attribute_pk": project_attribute_obj.pk},
                     )
                 )
+
+
+class ProjectAdminCommentCreateView(SuccessMessageMixin, LoginRequiredMixin, UserPassesTestMixin, CreateView):
+    model = ProjectAdminComment
+    fields = ["project", "author", "comment"]
+    template_name = "project/project_admin_comment_create.html"
+
+    def test_func(self):
+        """UserPassesTestMixin Tests"""
+        return self.request.user.is_superuser
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        pk = self.kwargs.get("pk")
+        project_obj = get_object_or_404(Project, pk=pk)
+        context["project"] = project_obj
+        return context
+
+    def get_initial(self):
+        initial = super().get_initial()
+        pk = self.kwargs.get("pk")
+        project_obj = get_object_or_404(Project, pk=pk)
+        author = self.request.user
+        initial["project"] = project_obj
+        initial["author"] = author
+        return initial
+
+    def get_form(self, form_class=None):
+        """Return an instance of the form to be used in this view."""
+        form = super().get_form(form_class)
+        form.fields["project"].widget = forms.HiddenInput()
+        form.fields["author"].widget = forms.HiddenInput()
+        form.order_fields(["project", "author", "comment"])
+        return form
+
+    def get_success_url(self):
+        return self.object.project.get_absolute_url()
+
+
+# class ProjectAdminCommentUpdateView(SuccessMessageMixin, LoginRequiredMixin, UserPassesTestMixin, UpdateView):
+#     model = ProjectAdminComment
+#     fields = ["comment"]
+#     template_name_suffix = "_update_form"
+#     success_message = "Project Admin Comment updated."
+
+#     def test_func(self):
+#         """UserPassesTestMixin Tests"""
+#         return self.request.user.is_superuser

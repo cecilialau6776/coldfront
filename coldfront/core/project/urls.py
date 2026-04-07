@@ -57,4 +57,9 @@ urlpatterns = [
         project_views.ProjectAttributeUpdateView.as_view(),
         name="project-attribute-update",
     ),
+    path(
+        "<int:pk>/admin-comment/create",
+        project_views.ProjectAdminCommentCreateView.as_view(),
+        name="project-admin-comment-create",
+    ),
 ]
