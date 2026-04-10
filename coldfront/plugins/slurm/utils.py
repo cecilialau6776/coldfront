@@ -12,6 +12,9 @@ from coldfront.core.utils.common import import_from_settings
 
 SLURM_CLUSTER_ATTRIBUTE_NAME = import_from_settings("SLURM_CLUSTER_ATTRIBUTE_NAME", "slurm_cluster")
 SLURM_ACCOUNT_ATTRIBUTE_NAME = import_from_settings("SLURM_ACCOUNT_ATTRIBUTE_NAME", "slurm_account_name")
+SLURM_QOS_ATTRIBUTE_NAME = import_from_settings("SLURM_QOS_ATTRIBUTE_NAME", "slurm_qos_name")
+SLURM_QOS_RESOURCE_NAME = import_from_settings("SLURM_QOS_RESOURCE_NAME", "Quality of Service")
+SLURM_QOS_SPECS_ATTRIBUTE_NAME = import_from_settings("SLURM_QOS_SPECS_ATTRIBUTE_NAME", "slurm_qos_specs")
 SLURM_PARENT_ATTRIBUTE_NAME = import_from_settings("SLURM_PARENT_ATTRIBUTE_NAME", "slurm_parent")
 SLURM_SPECS_ATTRIBUTE_NAME = import_from_settings("SLURM_SPECS_ATTRIBUTE_NAME", "slurm_specs")
 SLURM_USER_SPECS_ATTRIBUTE_NAME = import_from_settings("SLURM_USER_SPECS_ATTRIBUTE_NAME", "slurm_user_specs")

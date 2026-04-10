@@ -18,6 +18,9 @@ from coldfront.plugins.slurm.utils import (
     SLURM_ACCOUNT_ATTRIBUTE_NAME,
     SLURM_CLUSTER_ATTRIBUTE_NAME,
     SLURM_PARENT_ATTRIBUTE_NAME,
+    SLURM_QOS_ATTRIBUTE_NAME,
+    SLURM_QOS_RESOURCE_NAME,
+    SLURM_QOS_SPECS_ATTRIBUTE_NAME,
     SLURM_SPECS_ATTRIBUTE_NAME,
     SLURM_USER_SPECS_ATTRIBUTE_NAME,
     SlurmError,
@@ -70,10 +73,12 @@ class SlurmCluster(SlurmBase):
     def __init__(self, name, specs=None):
         super().__init__(name, specs=specs)
         self.accounts: dict[str, SlurmAccount] = {}
+        self.qoses: dict[str, SlurmQos] = {}
 
     @staticmethod
     def new_from_stream(stream):
         """Create a new SlurmCluster by parsing the output from sacctmgr dump."""
+        qoses = []
         cluster = None
         parent = None
         parent_account = None
@@ -82,6 +87,8 @@ class SlurmCluster(SlurmBase):
             line = line.strip()
             if re.match("^#", line):
                 continue
+            elif re.match("^QOS - '[^']+'", line):
+                qoses.append(SlurmQos.new_from_sacctmgr(line))
             elif re.match("^Cluster - '[^']+'", line):
                 parts = line.split(":")
                 name = re.sub(r"^Cluster - ", "", parts[0]).strip("\n'")
@@ -117,6 +124,8 @@ class SlurmCluster(SlurmBase):
         if not cluster or not cluster.name:
             raise no_cluster_error
 
+        cluster.qoses = {qos.name: qos for qos in qoses}
+
         return cluster
 
     @staticmethod
@@ -130,7 +139,7 @@ class SlurmCluster(SlurmBase):
 
         cluster = SlurmCluster(name, specs)
 
-        # Process allocations
+        # Process account allocations
         allocations = resource.allocation_set.filter(status__name__in=["Active", "Renewal Requested"])
         for allocation in allocations:
             cluster.add_allocation(allocation, allocations, user_specs=user_specs)
@@ -167,6 +176,16 @@ class SlurmCluster(SlurmBase):
             for account_name in child_accounts:
                 del cluster.accounts[account_name]
 
+        # collect QOSes
+        qos_res = Resource.objects.get(name=SLURM_QOS_RESOURCE_NAME)
+        qos_allocations = qos_res.allocation_set.filter(status__name__in=["Active", "Renewal Requested"])
+        for allocation in qos_allocations:
+            try:
+                qos = SlurmQos.new_from_allocation(allocation)
+                cluster.qoses[qos.name] = qos
+            except SlurmError:
+                logger.exception("")
+
         return cluster
 
     def add_allocation(self, allocation, res_allocations, specs=None, user_specs=None):
@@ -195,6 +214,8 @@ class SlurmCluster(SlurmBase):
 
     def write(self, out):
         self._write(out, f"# ColdFront Allocation Slurm associations dump {datetime.datetime.now().date()}\n")
+        for qos in self.qoses.values():
+            qos.write(out)
         self._write(out, f"Cluster - '{self.name}':{self.format_specs()}\n")
         if "root" in self.accounts:
             self.accounts["root"].write(out)
@@ -224,6 +245,40 @@ class SlurmCluster(SlurmBase):
             for key, value in child_objects_to_remove.items():
                 objects_to_remove[key].extend(value)
         return objects_to_remove
+
+
+class SlurmQos(SlurmBase):
+    def __init__(self, name, specs=None):
+        super().__init__(name, specs=specs)
+
+    @staticmethod
+    def new_from_sacctmgr(line):
+        """Create a new SlurmQOS by parsing a line from sacctmgr dump. For
+        example: QOS - 'qos_dingding':Description='qos_dingding':Flags='DenyOnLimit,NoDecay':GrpTRESMins=billing=1000"""
+        if not re.match("^QOS - '[^']+'", line):
+            raise SlurmParserError(f'Invalid format. Must start with "QOS" for line: {line}')
+
+        parts = line.split(":")
+        name = re.sub(r"^QOS - ", "", parts[0]).strip("\n'")
+        if len(name) == 0:
+            raise SlurmParserError(f"QOS name not found for line: {line}")
+
+        return SlurmQos(name, specs=parts[1:])
+
+    @staticmethod
+    def new_from_allocation(allocation):
+        name = allocation.get_attribute(SLURM_QOS_ATTRIBUTE_NAME)
+        if name is None:
+            raise SlurmError(f"QOS allocation doesn't have '{SLURM_QOS_ATTRIBUTE_NAME}' attribute")
+        specs = allocation.get_attribute_list(SLURM_QOS_SPECS_ATTRIBUTE_NAME)
+        return SlurmQos(name, specs)
+
+    def write(self, out):
+        formatted_specs = self.format_specs()
+        self._write(out, f"QOS - '{self.name}'")
+        if len(formatted_specs) > 0:
+            self._write(out, f":{self.format_specs()}")
+        self._write(out, "\n")
 
 
 class SlurmAccount(SlurmBase):
