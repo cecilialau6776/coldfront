@@ -137,7 +137,6 @@ class AssociationTest(TestCase):
 # User - 'lipari':MaxNodesPerJob=2:MaxJobs=3:MaxTRESMins=cpu=4:FairShare=1:MaxWallDurationPerJob=1
 Cluster - 'test_cluster'
 Parent - 'root'
-User - 'root':DefaultAccount='root':AdminLevel='Administrator':Fairshare=1
 Account - 'a1':Description='a1':Organization='a1'
 Account - 'a7':Description='a7':Organization='a7'
 Parent - 'a1'
