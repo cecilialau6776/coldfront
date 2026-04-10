@@ -49,7 +49,6 @@ class AssociationTest(TestCase):
 # User - 'lipari':MaxNodesPerJob=2:MaxJobs=3:MaxTRESMins=cpu=4:FairShare=1:MaxWallDurationPerJob=1
 Cluster - 'alpha':DefaultQOS='general-compute':Fairshare=1:QOS='normal'
 Parent - 'root'
-User - 'root':DefaultAccount='root':AdminLevel='Administrator':Fairshare=1
 Account - 'physics':Description='physics':Organization='physics':Fairshare=100:QOS='debug,general-compute'
 Parent - 'physics'
 User - 'jane':DefaultAccount='physics':Fairshare=parent
