@@ -200,7 +200,7 @@ class SlurmCluster(SlurmBase):
             self.accounts["root"].write(out)
         else:
             self._write(out, "Parent - 'root'\n")
-            self._write(out, "User - 'root':DefaultAccount='root':AdminLevel='Administrator':Fairshare=1\n")
+            self._write(out, "User - 'root':DefaultAccount='root':AdminLevel='Administrator':Fairshare=1:Share=0\n")
 
         for account in self.accounts.values():
             if account.name == "root":
