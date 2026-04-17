@@ -98,7 +98,7 @@ QOS - 'qos_admin':Description='qos_admin'
 QOS - 'proj_myproj':Description='proj_myproj':GrpTRESMins=billing=1000:Flags='DenyOnLimit,NoDecay'
 Cluster - 'test_cluster':Fairshare=1:QOS='free'
 Parent - 'root'
-User - 'root':DefaultAccount='root':AdminLevel='Administrator':Fairshare=1
+User - 'root':DefaultAccount='root':AdminLevel='Administrator':Fairshare=1:Share=0
         """)
 
     def expected_cluster(self, cluster):
