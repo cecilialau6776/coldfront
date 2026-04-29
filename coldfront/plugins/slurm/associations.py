@@ -223,12 +223,12 @@ class SlurmCluster(SlurmBase):
             self._write(out, "Parent - 'root'\n")
             self._write(out, "User - 'root':DefaultAccount='root':AdminLevel='Administrator':Fairshare=1:Share=0\n")
 
-        for account in self.accounts.values():
+        sorted_accounts = sorted(self.accounts.values(), key=lambda account: not account.has_default())
+        for account in sorted_accounts:
             if account.name == "root":
                 continue
             account.write(out)
-
-        for name, account in self.accounts.items():
+        for account in sorted_accounts:
             account.write_children(out)
 
     def get_objects_to_remove(self, expected: "SlurmCluster") -> dict[str, list[dict]]:
@@ -354,11 +354,13 @@ class SlurmAccount(SlurmBase):
 
     def write_children(self, out):
         self._write(out, f"Parent - '{self.name}'\n")
-        for user in self.users.values():
+        sorted_users = sorted(self.users.values(), key=lambda user: not user.has_default())
+        sorted_accounts = sorted(self.accounts.values(), key=lambda account: not account.has_default())
+        for user in sorted_users:
             user.write(out)
-        for account in self.accounts.values():
+        for account in sorted_accounts:
             account.write(out)
-        for account in self.accounts.values():
+        for account in sorted_accounts:
             account.write_children(out)
 
     def get_objects_to_remove(self, expected: Optional["SlurmAccount"] = None) -> dict[str, list[dict]]:
@@ -407,6 +409,11 @@ class SlurmAccount(SlurmBase):
         if accounts_removed == len(self.accounts) and users_removed == len(self.users):
             objects_to_remove["accounts"].append({"account": self.name})
         return objects_to_remove
+
+    def has_default(self):
+        users_have_default = any(user.has_default() for user in self.users.values())
+        accounts_have_default = any(account.has_default() for account in self.accounts.values())
+        return any([users_have_default, accounts_have_default])
 
 
 class SlurmUser(SlurmBase):
@@ -463,3 +470,10 @@ class SlurmUser(SlurmBase):
         )
 
         return diff
+
+    def has_default(self):
+        """Checks if a DefaultAccount is specified"""
+        items = set()
+        for spec in self.specs:
+            items.update(spec.split())
+        return any((spec.startswith("DefaultAccount") for spec in items))
