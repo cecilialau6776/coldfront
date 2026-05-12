@@ -1625,14 +1625,3 @@ class ProjectAdminCommentCreateView(SuccessMessageMixin, LoginRequiredMixin, Use
 
     def get_success_url(self):
         return self.object.project.get_absolute_url()
-
-
-# class ProjectAdminCommentUpdateView(SuccessMessageMixin, LoginRequiredMixin, UserPassesTestMixin, UpdateView):
-#     model = ProjectAdminComment
-#     fields = ["comment"]
-#     template_name_suffix = "_update_form"
-#     success_message = "Project Admin Comment updated."
-
-#     def test_func(self):
-#         """UserPassesTestMixin Tests"""
-#         return self.request.user.is_superuser

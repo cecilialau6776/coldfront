@@ -18,6 +18,7 @@ from coldfront.core.test_helpers.factories import (
     ProjectFactory,
     ProjectUserFactory,
     ResourceFactory,
+    ResourceTypeFactory,
     UserFactory,
 )
 from coldfront.plugins.slurm.associations import SlurmCluster
@@ -55,6 +56,8 @@ class AssociationTest(TestCase):
             resource_attribute_type=ResourceAttributeType.objects.get(name="slurm_cluster"),
             value="test_cluster",
         )
+        # create qos resource
+        cls.qos_res = ResourceFactory(resource_type=ResourceTypeFactory(name="Cluster QOS"), name="Quality of Service")
         # dummy second cluster to ensure there are no conflicts with multiple clusters
         dummy_cluster = ResourceFactory(resource_type=ResourceType.objects.get(name="Cluster"))
         ResourceAttribute.objects.create(
@@ -137,7 +140,7 @@ class AssociationTest(TestCase):
 # User - 'lipari':MaxNodesPerJob=2:MaxJobs=3:MaxTRESMins=cpu=4:FairShare=1:MaxWallDurationPerJob=1
 Cluster - 'test_cluster'
 Parent - 'root'
-User - 'root':DefaultAccount='root':AdminLevel='Administrator':Fairshare=1
+User - 'root':DefaultAccount='root':AdminLevel='Administrator':Fairshare=1:Share=0
 Account - 'a1':Description='a1':Organization='a1'
 Account - 'a7':Description='a7':Organization='a7'
 Parent - 'a1'

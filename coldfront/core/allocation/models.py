@@ -459,7 +459,7 @@ class Allocation(TimeStampedModel):
         users = allocation_users.values_list("user", flat=True)
         filter_options = {
             "user__in": users,
-            "staus__name": "Active",
+            "status__name": "Active",
             "enable_notifications": True,
         }
 
