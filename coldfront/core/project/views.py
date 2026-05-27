@@ -250,86 +250,48 @@ class ProjectListView(LoginRequiredMixin, ListView):
 
         projects = Project.objects.prefetch_related("pi", "field_of_science", "status")
 
-        if project_search_form.is_valid():
-            data = project_search_form.cleaned_data
-            if data.get("show_all_projects") and (
-                self.request.user.is_superuser or self.request.user.has_perm("project.can_view_all_projects")
-            ):
-                projects = (
-                    Project.objects.select_related(
-                        "pi",
-                        "field_of_science",
-                        "status",
-                    )
-                    .filter(
-                        status__name__in=[
-                            "New",
-                            "Active",
-                        ]
-                    )
-                    .order_by(order_by)
-                )
-            else:
-                projects = (
-                    Project.objects.select_related(
-                        "pi",
-                        "field_of_science",
-                        "status",
-                    )
-                    .filter(
-                        Q(
-                            status__name__in=[
-                                "New",
-                                "Active",
-                            ]
-                        )
-                        & Q(projectuser__user=self.request.user)
-                        & Q(projectuser__status__name="Active")
-                    )
-                    .order_by(order_by)
-                )
+        if not project_search_form.is_valid():
+            projects = projects.filter(
+                Q(status__name__in=["New", "Active"])
+                & Q(projectuser__user=self.request.user)
+                & Q(projectuser__status__name="Active")
+            )
+            return projects.order_by(order_by).distinct()
 
-            # Last Name
-            if data.get("title"):
-                projects = projects.filter(title__icontains=data.get("title"))
-
-            # Last Name
-            if data.get("last_name"):
-                projects = projects.filter(pi__last_name__icontains=data.get("last_name"))
-
-            # Username
-            if data.get("username"):
-                projects = projects.filter(
-                    Q(pi__username__icontains=data.get("username"))
-                    | Q(projectuser__user__username__icontains=data.get("username"))
-                    & Q(projectuser__status__name="Active")
-                )
-
-            # Field of Science
-            if data.get("field_of_science"):
-                projects = projects.filter(field_of_science__description__icontains=data.get("field_of_science"))
-
+        data = project_search_form.cleaned_data
+        if data.get("show_all_projects") and (
+            self.request.user.is_superuser or self.request.user.has_perm("project.can_view_all_projects")
+        ):
+            projects = projects.filter(status__name__in=["New", "Active"])
         else:
-            projects = (
-                Project.objects.select_related(
-                    "pi",
-                    "field_of_science",
-                    "status",
-                )
-                .filter(
-                    Q(
-                        status__name__in=[
-                            "New",
-                            "Active",
-                        ]
-                    )
-                    & Q(projectuser__user=self.request.user)
-                    & Q(projectuser__status__name="Active")
-                )
-                .order_by(order_by)
+            projects = projects.filter(
+                Q(status__name__in=["New", "Active"])
+                & Q(projectuser__user=self.request.user)
+                & Q(projectuser__status__name="Active")
             )
 
-        return projects.order_by(order_by).distinct()
+        # Title
+        if data.get("title"):
+            projects = projects.filter(title__icontains=data.get("title"))
+        # Last Name
+        if data.get("last_name"):
+            projects = projects.filter(pi__last_name__icontains=data.get("last_name"))
+        # Username
+        if data.get("username"):
+            projects = projects.filter(
+                Q(pi__username__icontains=data.get("username"))
+                | Q(projectuser__user__username__icontains=data.get("username")) & Q(projectuser__status__name="Active")
+            )
+        # Field of Science
+        if data.get("field_of_science"):
+            projects = projects.filter(field_of_science__description__icontains=data.get("field_of_science"))
+        needs_review = data.get("needs_review")
+        if needs_review != "none":
+            needs_review = True if needs_review == "yes" else False
+            project_ids = [project.id for project in projects if project.needs_review == needs_review]
+            projects = Project.objects.filter(id__in=project_ids)
+        projects = projects.order_by(order_by).distinct()
+        return projects
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
