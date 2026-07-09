@@ -223,10 +223,13 @@ User - 'u2'
         expected = {"users": [], "accounts": [], "qoses": []}
         self.assertEqual(expected, cluster.get_objects_to_remove(coldfront_cluster))
 
-        # deactivate user a7 (u4) and allocation a3
+        # deactivate user a7 (u4), user u2 from allocation a8, and allocation a3
         u4 = self.a7.allocationuser_set.get(user=self.u4)
         u4.status = AllocationUserStatusChoice.objects.get(name="Removed")
         u4.save()
+        u2 = self.a8.allocationuser_set.get(user=self.u2)
+        u2.status = AllocationUserStatusChoice.objects.get(name="Removed")
+        u2.save()
         self.a3.status = AllocationStatusChoiceFactory(name="Denied")
         self.a3.save()
         coldfront_cluster = SlurmCluster.new_from_resource(self.resource)
@@ -235,6 +238,7 @@ User - 'u2'
                 {"user": "u1", "account": "a4"},
                 {"user": "u2", "account": "a4"},
                 {"user": "u3", "account": "a6"},
+                {"user": "u2", "account": "a8"},
                 {"user": "a7", "account": "a7"},
             ],
             "accounts": [
@@ -246,4 +250,5 @@ User - 'u2'
             "qoses": [],
         }
         self.maxDiff = None
+        print(cluster.get_objects_to_remove(coldfront_cluster))
         self.assertEqual(expected, cluster.get_objects_to_remove(coldfront_cluster))
