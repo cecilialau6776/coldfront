@@ -385,9 +385,8 @@ class SlurmAccount(SlurmBase):
 
         accounts_removed = 0
         for account_name, account in self.accounts.items():
-            if account_name in expected.accounts:
-                continue
-            accounts_removed += 1
+            if account_name not in expected.accounts:
+                accounts_removed += 1
             child_objects_to_remove = account.get_objects_to_remove(expected.accounts.get(account_name))
             for key, value in child_objects_to_remove.items():
                 objects_to_remove[key].extend(value)
