@@ -12,14 +12,14 @@ export function initGaugeChart(): void {
   for (const element of gauges) {
     if (element !== null) {
       const used = Number(element?.getAttribute('data-used') || 0);
-      let total = Number(element?.getAttribute('data-total') || 0) - used;
+      let available = Number(element?.getAttribute('data-total') || 0) - used;
       const title = String(element?.getAttribute('data-title') || '');
 
-      if (total < 0) {
-        total = 0;
+      if (available < 0) {
+        available = 0;
       }
 
-      createGaugeChart(element, title, used, total);
+      createGaugeChart(element, title, used, available);
     }
   }
 }
@@ -27,16 +27,22 @@ export function initGaugeChart(): void {
 function createGaugeChart(
   canvas: HTMLCanvasElement,
   title: string,
-  value: number,
-  total: number
+  used: number,
+  available: number
 ): void {
+  const total = used + available;
+  const used_percentage = (used / total) * 100;
+  const available_percentage = (available / total) * 100;
   new Chart(canvas, {
     type: 'doughnut',
     data: {
-      labels: ['Used', 'Available'],
+      labels: [
+        `Used (${used_percentage.toFixed(2)}%)`,
+        `Available (${available_percentage.toFixed(2)}%)`,
+      ],
       datasets: [
         {
-          data: [value, total],
+          data: [used, available],
           // This uses bootstraps colors
           backgroundColor: [
             getCSSVariable('--bs-success'),
@@ -52,12 +58,14 @@ function createGaugeChart(
     },
     options: {
       radius: '70%',
+      aspectRatio: 2,
       rotation: 270,
       circumference: 180,
       responsive: true,
       plugins: {
         legend: {
-          display: false,
+          display: true,
+          position: 'bottom',
         },
         title: {
           display: true,
