@@ -267,8 +267,8 @@ Allocation Detail
           <div class="card mb-3 me-1">
             <div class="card-body">
               <h4 class="card-title">{{attribute}}</h4>
-              <div class="chart-container mx-auto" style="text-align: center; position: relative; width:40%">
-                  <canvas class="gauge-chart" data-title="{{ attribute.allocation_attribute_type.name }} {{ attribute.allocationattributeusage.value }} of {{ attribute.value }}" data-total="{{ attribute.value }}" data-used="{{ attribute.allocationattributeusage.value }}"></canvas>
+              <div class="chart-container mx-auto" style="text-align: center; position: relative;">
+                  <canvas class="gauge-chart" data-total="{{ attribute.value }}" data-used="{{ attribute.allocationattributeusage.value }}"></canvas>
               </div>
             </div>
           </div>
