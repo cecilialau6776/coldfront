@@ -53,7 +53,7 @@ def home(request):
                 )
             )
             .distinct()
-            .order_by("-created")[:5]
+            .order_by("-created")
         )
 
         allocation_list = (
@@ -77,7 +77,7 @@ def home(request):
                 & Q(allocationuser__status__name__in=["Active", "PendingEULA"])
             )
             .distinct()
-            .order_by("-created")[:5]
+            .order_by("-project__created", "status", "-resources")
         )
 
         if ALLOCATION_EULA_ENABLE:
