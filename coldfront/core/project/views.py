@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
+from coldfront.core.allocation.forms import AllocationUpdateForm
 import logging
 
 from django import forms
@@ -205,6 +206,26 @@ class ProjectDetailView(LoginRequiredMixin, UserPassesTestMixin, DetailView):
             if allocation_user:
                 user_status.append(allocation_user.first().status.name)
 
+        context_allocations = []
+        if self.request.user.is_superuser:
+            for allocation in allocations:
+                if allocation.status.name != "New":
+                    context_allocations.append((allocation, None))
+                    continue
+
+                initial_data = {
+                    "status": allocation.status,
+                    "end_date": allocation.end_date,
+                    "start_date": allocation.start_date,
+                    "description": allocation.description,
+                    "is_locked": allocation.is_locked,
+                    "is_changeable": allocation.is_changeable,
+                }
+                allocation_form = AllocationUpdateForm(initial=initial_data)
+                for field in allocation_form.fields.values():
+                    field.widget = forms.HiddenInput()
+                context_allocations.append((allocation, allocation_form))
+
         note_set = project_obj.projectusermessage_set
         notes = note_set.all() if self.request.user.is_superuser else note_set.filter(is_private=False)
 
@@ -219,7 +240,7 @@ class ProjectDetailView(LoginRequiredMixin, UserPassesTestMixin, DetailView):
         context["grants"] = Grant.objects.select_related("status").filter(
             project=project_obj, status__name__in=["Active", "Pending", "Archived"]
         )
-        context["allocations"] = allocations
+        context["allocations"] = context_allocations
         context["user_allocation_status"] = user_status
         context["attributes"] = attributes
         context["attributes_with_usage"] = attributes_with_usage
