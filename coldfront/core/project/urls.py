@@ -62,4 +62,5 @@ urlpatterns = [
         project_views.ProjectAdminCommentCreateView.as_view(),
         name="project-admin-comment-create",
     ),
+    path("<str:title>/", project_views.ProjectDetailRedirectView.as_view()),
 ]
