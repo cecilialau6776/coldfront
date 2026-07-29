@@ -19,7 +19,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views import View
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
-from django.views.generic.base import TemplateView
+from django.views.generic.base import TemplateView, RedirectView
 from django.views.generic.edit import FormView
 
 from coldfront.core.allocation.models import (
@@ -81,6 +81,14 @@ PROJECT_UPDATE_FIELDS = import_from_settings(
 
 logger = logging.getLogger(__name__)
 PROJECT_INSTITUTION_EMAIL_MAP = import_from_settings("PROJECT_INSTITUTION_EMAIL_MAP", False)
+
+
+class ProjectDetailRedirectView(RedirectView):
+    permenant = True
+
+    def get_redirect_url(self, *args, **kwargs):
+        project = get_object_or_404(Project, title=kwargs["title"])
+        return project.get_absolute_url()
 
 
 class ProjectDetailView(LoginRequiredMixin, UserPassesTestMixin, DetailView):
