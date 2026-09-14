@@ -282,6 +282,7 @@ name = "coldfront"
 version = "1.1.9"
 source = { editable = "." }
 dependencies = [
+    { name = "bibtexparser" },
     { name = "crispy-bootstrap5" },
     { name = "django" },
     { name = "django-crispy-forms" },
@@ -349,6 +350,7 @@ docs = [
 
 [package.metadata]
 requires-dist = [
+    { name = "bibtexparser", specifier = "~=1.0" },
     { name = "crispy-bootstrap5", specifier = ">=2025.6" },
     { name = "cryptography", marker = "extra == 'freeipa'", specifier = ">=43.0.3" },
     { name = "dbus-python", marker = "extra == 'freeipa'", specifier = ">=1.4.0" },
