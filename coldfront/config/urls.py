@@ -6,6 +6,7 @@
 ColdFront URL Configuration
 """
 
+import sys
 import environ
 import split_settings
 from django.conf import settings
@@ -14,6 +15,8 @@ from django.core import serializers
 from django.http import HttpResponse
 from django.urls import include, path
 from django.views.generic import TemplateView
+from django.views.debug import technical_500_response
+from django.views.defaults import server_error
 
 import coldfront.core.portal.views as portal_views
 from coldfront.config.env import ENV, PROJECT_ROOT
@@ -60,6 +63,14 @@ if "django_su.backends.SuBackend" in settings.AUTHENTICATION_BACKENDS:
     _patterns.append(path("su/", include("django_su.urls")))
 
 urlpatterns = [path(settings.BASE_PATH, include(_patterns))]
+
+
+# Display tehcnical 500 page for superusers
+def handler500(request):
+    if request.user.is_superuser:
+        return technical_500_response(request, *sys.exc_info())
+    else:
+        return server_error(request)
 
 
 def export_as_json(modeladmin, request, queryset):
