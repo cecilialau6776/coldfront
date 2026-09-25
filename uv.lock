@@ -34,12 +34,15 @@ wheels = [
 
 [[package]]
 name = "bibtexparser"
-version = "1.4.4"
+version = "2.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyparsing" },
+    { name = "pylatexenc" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/44/1c/577d3ce406e88f370e80a6ebf76ae52a2866521e0b585e8ec612759894f1/bibtexparser-1.4.4.tar.gz", hash = "sha256:093b6c824f7a71d3a748867c4057b71f77c55b8dbc07efc993b781771520d8fb", size = 55594, upload-time = "2026-01-29T18:58:01.366Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8b/78/0096d455f90f4c1f38f0115b74f2ce3fa32814e58a1549f4af1a46bc6d8f/bibtexparser-2.0.1.tar.gz", hash = "sha256:672a59f4ba431c4e9a6647cc7c42a267b22e257bcd2cfdb661863f3756c9ab14", size = 88449, upload-time = "2026-09-10T20:32:34.09Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/97/fc/d37bc247b999fdddd0f0f0478689ee531e2b694b9a3994b1d55b0f9007f5/bibtexparser-2.0.1-py3-none-any.whl", hash = "sha256:aa263e252f4340c0fc50f9f7e5d63a9799b31b01a5aa460a261db3f2a01c6c38", size = 50013, upload-time = "2026-09-10T20:32:33.12Z" },
+]
 
 [[package]]
 name = "boolean-py"
@@ -282,6 +285,7 @@ name = "coldfront"
 version = "1.1.9"
 source = { editable = "." }
 dependencies = [
+    { name = "bibtexparser" },
     { name = "crispy-bootstrap5" },
     { name = "django" },
     { name = "django-crispy-forms" },
@@ -349,6 +353,7 @@ docs = [
 
 [package.metadata]
 requires-dist = [
+    { name = "bibtexparser", specifier = ">=2.0.1" },
     { name = "crispy-bootstrap5", specifier = ">=2025.6" },
     { name = "cryptography", marker = "extra == 'freeipa'", specifier = ">=43.0.3" },
     { name = "dbus-python", marker = "extra == 'freeipa'", specifier = ">=1.4.0" },
@@ -1304,6 +1309,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pylatexenc"
+version = "2.11"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/52/45/ddb0fb04acf95fe9cf9c369814dbdd08651bd2c9ee455f142651e06f4488/pylatexenc-2.11.tar.gz", hash = "sha256:305a072a99ce736246049c9da05841b9d718c0f7ea8888f5f596cf15cb621053", size = 165743, upload-time = "2026-07-25T17:26:31.534Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e7/06/3d67bd912ef337aa4856b466121d03f304aa1bb4d804f9298b6227cd227e/pylatexenc-2.11-py2.py3-none-any.whl", hash = "sha256:e78e7391d6c104f1ed150e21cfaa58016cdb50aa54406a2eecb793649ffdfdd0", size = 137533, upload-time = "2026-07-25T17:26:30.141Z" },
+]
+
+[[package]]
 name = "pymdown-extensions"
 version = "11.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1314,15 +1328,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/21/a9/5f0c535ba3b08fe09270c16808e053a968868242ecbd5676d4e3a488bf28/pymdown_extensions-11.0.1.tar.gz", hash = "sha256:dd2905ae6fc5b75582fafb139a1266ffc754705efa902aa50067fa7ff4f94ec0", size = 857113, upload-time = "2026-07-02T17:59:22.955Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d6/54/da572c98c0b77626a91b5d3b89f0231d8bff5125c225420908632f8b342d/pymdown_extensions-11.0.1-py3-none-any.whl", hash = "sha256:db3943a62bab7e03af1364f0c4083e64b91fb097675a4b6cceccfbe9a77e5eb2", size = 269455, upload-time = "2026-07-02T17:59:21.271Z" },
-]
-
-[[package]]
-name = "pyparsing"
-version = "3.3.2"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/f3/91/9c6ee907786a473bf81c5f53cf703ba0957b23ab84c264080fb5a450416f/pyparsing-3.3.2.tar.gz", hash = "sha256:c777f4d763f140633dcb6d8a3eda953bf7a214dc4eff598413c070bcdc117cbc", size = 6851574, upload-time = "2026-01-21T03:57:59.36Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/10/bd/c038d7cc38edc1aa5bf91ab8068b63d4308c66c4c8bb3cbba7dfbc049f9c/pyparsing-3.3.2-py3-none-any.whl", hash = "sha256:850ba148bd908d7e2411587e247a1e4f0327839c40e2e5e6d05a007ecc69911d", size = 122781, upload-time = "2026-01-21T03:57:55.912Z" },
 ]
 
 [[package]]

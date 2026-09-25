@@ -4,12 +4,10 @@
 
 import ast
 import io
-import re
 import uuid
 
+import bibtexparser
 import requests
-from bibtexparser.bibdatabase import as_text
-from bibtexparser.bparser import BibTexParser
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.db.models import Count
@@ -105,9 +103,8 @@ class PublicationSearchResultView(LoginRequiredMixin, UserPassesTestMixin, Templ
             if source.name == "doi":
                 try:
                     status, bib_str = crossref.get_bib(unique_id)
-                    bp = BibTexParser(interpolate_strings=False)
-                    bib_database = bp.parse(bib_str)
-                    bib_json = bib_database.entries[0]
+                    library = bibtexparser.parse_string(bib_str)
+                    entry = library.entries[0]
                     matching_source_obj = source
                     break
                 except Exception:
@@ -115,13 +112,10 @@ class PublicationSearchResultView(LoginRequiredMixin, UserPassesTestMixin, Templ
 
             elif source.name == "adsabs":
                 try:
-                    url = "http://adsabs.harvard.edu/cgi-bin/nph-bib_query?bibcode={}&data_type=BIBTEX".format(
-                        unique_id
-                    )
+                    url = f"http://adsabs.harvard.edu/cgi-bin/nph-bib_query?bibcode={unique_id}&data_type=BIBTEX"
                     r = requests.get(url, timeout=5)
-                    bp = BibTexParser(interpolate_strings=False)
-                    bib_database = bp.parse(r.text)
-                    bib_json = bib_database.entries[0]
+                    library = bibtexparser.parse_string(r.text)
+                    entry = library.entries[0]
                     matching_source_obj = source
                     break
                 except Exception:
@@ -130,41 +124,13 @@ class PublicationSearchResultView(LoginRequiredMixin, UserPassesTestMixin, Templ
         if not matching_source_obj:
             return False
 
-        year = as_text(bib_json["year"])
-        author = (
-            as_text(bib_json["author"])
-            .replace("{\\textquotesingle}", "'")
-            .replace("{\\textendash}", "-")
-            .replace("{\\textemdash}", "-")
-            .replace("{\\textasciigrave}", " ")
-            .replace("{\\textdaggerdbl}", " ")
-            .replace("{\\textdagger}", " ")
-        )
-        title = (
-            as_text(bib_json["title"])
-            .replace("{\\textquotesingle}", "'")
-            .replace("{\\textendash}", "-")
-            .replace("{\\textemdash}", "-")
-            .replace("{\\textasciigrave}", " ")
-            .replace("{\\textdaggerdbl}", " ")
-            .replace("{\\textdagger}", " ")
-        )
-
-        author = re.sub("{|}", "", author)
-        title = re.sub("{|}", "", title)
+        year = entry["year"]
+        author = entry["author"]
+        title = entry["title"]
 
         # not all bibtex entries will have a journal field
-        if "journal" in bib_json:
-            journal = (
-                as_text(bib_json["journal"])
-                .replace("{\\textquotesingle}", "'")
-                .replace("{\\textendash}", "-")
-                .replace("{\\textemdash}", "-")
-                .replace("{\\textasciigrave}", " ")
-                .replace("{\\textdaggerdbl}", " ")
-                .replace("{\\textdagger}", " ")
-            )
-            journal = re.sub("{|}", "", journal)
+        if "journal" in entry:
+            journal = entry["journal"]
         else:
             # fallback: clearly indicate that data was absent
             source_name = matching_source_obj.name
@@ -488,8 +454,6 @@ class PublicationExportPublicationsView(LoginRequiredMixin, UserPassesTestMixin,
                     print("id is" + publication_obj.display_uid())
                     publication_obj.display_uid()
                     status, bib_str = crossref.get_bib(publication_obj.display_uid())
-                    bp = BibTexParser(interpolate_strings=False)
-                    bp.parse(bib_str)
                     bib_text += bib_str
             response = HttpResponse(content_type="text/plain")
             response["Content-Disposition"] = "attachment; filename=refs.bib"
