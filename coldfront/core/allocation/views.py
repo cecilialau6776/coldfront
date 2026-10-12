@@ -19,6 +19,7 @@ from django.forms import formset_factory
 from django.http import HttpResponseBadRequest, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
+from django.utils.safestring import mark_safe
 from django.views import View
 from django.views.generic import ListView, TemplateView
 from django.views.generic.edit import CreateView, FormView, UpdateView
@@ -666,9 +667,23 @@ class AllocationCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateView):
         return kwargs
 
     def form_valid(self, form):
-        redirect = super().form_valid(form)
         form_data = form.cleaned_data
+        project_obj = form_data.get("project")
         resource_obj = form_data.get("resource")
+        active_allocs = project_obj.allocation_set.filter(status__name="Active")
+        matching_alloc = active_allocs.filter(resources__in=[resource_obj]).first()
+
+        # reject if another allocation of the same type already exists
+        if (not self.request.user.is_superuser) and matching_alloc:
+            messages.error(
+                self.request,
+                mark_safe(
+                    f"This project already has a(n) {resource_obj.name} allocation. Please <a href='{reverse('allocation-change', kwargs={'pk': matching_alloc.pk})}'>request a change</a> to your existing allocation instead. If you need a new allocation, please <a href='https://help.rit.edu'>submit a ticket.</a>"
+                ),
+            )
+            return super().form_invalid(form)
+
+        redirect = super().form_valid(form)
         allocation_account = form_data.get("allocation_account", None)
 
         # add users to allocation

@@ -225,6 +225,8 @@ class ProjectDetailView(LoginRequiredMixin, UserPassesTestMixin, DetailView):
                 for field in allocation_form.fields.values():
                     field.widget = forms.HiddenInput()
                 context_allocations.append((allocation, allocation_form))
+        else:
+            context_allocations = [(allocation, None) for allocation in allocations]
 
         note_set = project_obj.projectusermessage_set
         notes = note_set.all() if self.request.user.is_superuser else note_set.filter(is_private=False)
