@@ -34,7 +34,7 @@ urlpatterns = [
         name="publication-export-publications",
     ),
     path(
-        "data/by-year",
+        "data/by-year/",
         publication_views.PublicationByYearView.as_view(),
         name="publications-by-year",
     ),

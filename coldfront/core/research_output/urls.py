@@ -13,7 +13,7 @@ urlpatterns = [
         name="add-research-output",
     ),
     path(
-        "project/<int:project_pk>/delete-research-outputs",
+        "project/<int:project_pk>/delete-research-outputs/",
         research_output_views.ResearchOutputDeleteResearchOutputsView.as_view(),
         name="research-output-delete-research-outputs",
     ),
