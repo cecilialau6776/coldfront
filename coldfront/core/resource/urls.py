@@ -10,12 +10,12 @@ urlpatterns = [
     path("", resource_views.ResourceListView.as_view(), name="resource-list"),
     path("<int:pk>/", resource_views.ResourceDetailView.as_view(), name="resource-detail"),
     path(
-        "<int:pk>/resourceattribute/add",
+        "<int:pk>/resourceattribute/add/",
         resource_views.ResourceAttributeCreateView.as_view(),
         name="resource-attribute-add",
     ),
     path(
-        "<int:pk>/resourceattribute/delete",
+        "<int:pk>/resourceattribute/delete/",
         resource_views.ResourceAttributeDeleteView.as_view(),
         name="resource-attribute-delete",
     ),
