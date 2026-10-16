@@ -1893,6 +1893,7 @@ class AllocationChangeView(LoginRequiredMixin, UserPassesTestMixin, FormView):
             "Renewal Requested",
             "Payment Pending",
             "Payment Requested",
+            "Expired",
             "Paid",
         ]:
             messages.error(
