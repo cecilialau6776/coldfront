@@ -20,6 +20,7 @@ class GrantForm(ModelForm):
         labels = {
             "percent_credit": f"Percent credit to {CENTER_NAME}",
             "direct_funding": f"Direct funding to {CENTER_NAME}",
+            "other_award_number": "SRS Number",
         }
         help_texts = {
             "percent_credit": f"Percent financial credit of the total grant amount to {CENTER_NAME}.",
