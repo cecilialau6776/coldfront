@@ -223,6 +223,8 @@ class PublicationAddView(LoginRequiredMixin, UserPassesTestMixin, View):
                             "author": author,
                             "year": form_data.get("year"),
                             "journal": form_data.get("journal"),
+                            "used_rc": form_data.get("used_rc"),
+                            "cited_rc": form_data.get("cited_rc"),
                             "source": source_obj,
                         },
                     )

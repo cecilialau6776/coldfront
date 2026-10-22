@@ -36,6 +36,8 @@ class Publication(TimeStampedModel):
         unique_id (str): publication ID
         source (PublicationSource): represents the source of the publication
         status (str): publication status
+        used_rc (bool): publication used RC resources
+        cited_rc (bool): publication cited RC
     """
 
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
@@ -50,6 +52,8 @@ class Publication(TimeStampedModel):
         ("Archived", "Archived"),
     )
     status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="Active")
+    used_rc = models.BooleanField(default=False)
+    cited_rc = models.BooleanField(default=False)
     history = HistoricalRecords()
 
     class Meta:
