@@ -21,6 +21,7 @@ from coldfront.core.utils.mail import send_email_template
 from coldfront.core.utils.validate import AttributeValidator
 
 PROJECT_ENABLE_PROJECT_REVIEW = import_from_settings("PROJECT_ENABLE_PROJECT_REVIEW", False)
+ALLOCATION_DEFAULT_ALLOCATION_LENGTH = import_from_settings("ALLOCATION_DEFAULT_ALLOCATION_LENGTH", 365)
 
 
 class ProjectPermission(Enum):
@@ -199,6 +200,43 @@ We do not have information about your research. Please provide a detailed descri
 
         return False
 
+    @property
+    def next_needs_review(self) -> None | datetime.date:
+        """
+        Returns:
+            None | datetime.date: next date the project can be reviewed, or None if never
+        """
+        if self.status.name == "Archived":
+            return None
+
+        if self.force_review:
+            return datetime.date.today()
+
+        if not PROJECT_ENABLE_PROJECT_REVIEW:
+            return None
+
+        if not self.requires_review:
+            return None
+
+        last_updated_date = self.created
+        if self.projectreview_set.exists():
+            last_updated_date = self.projectreview_set.order_by("-created").first().created
+
+        return (last_updated_date + datetime.timedelta(days=365)).date()
+
+    def get_default_allocation_end_date(self) -> datetime.date:
+        today = datetime.date.today()
+        end_date = None
+        end_date_str = self.get_attribute("Project End Date")
+        if end_date_str:
+            end_date = datetime.datetime.strptime(end_date_str, "%Y-%m-%d").date()
+        if end_date and end_date <= (today + datetime.timedelta(weeks=52 + 52 // 2)):
+            return end_date
+        next_review = self.next_needs_review
+        if next_review:
+            return next_review + datetime.timedelta(days=30)
+        return today + datetime.timedelta(days=ALLOCATION_DEFAULT_ALLOCATION_LENGTH)
+
     def user_permissions(self, user):
         """
         Params:
@@ -330,6 +368,10 @@ We do not have information about your research. Please provide a detailed descri
         )
 
         project_archive.send(sender=self.__class__, project_obj=self)
+
+    def get_attribute(self, name):
+        attr = self.projectattribute_set.filter(proj_attr_type__name=name).first()
+        return attr.value if attr else None
 
     def get_absolute_url(self):
         return reverse("project-detail", kwargs={"pk": self.pk})

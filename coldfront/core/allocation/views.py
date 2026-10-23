@@ -267,9 +267,7 @@ class AllocationDetailView(LoginRequiredMixin, UserPassesTestMixin, TemplateView
             if not allocation_obj.start_date:
                 allocation_obj.start_date = datetime.datetime.now()
             if "approve" in action or not allocation_obj.end_date:
-                allocation_obj.end_date = datetime.datetime.now() + relativedelta(
-                    days=ALLOCATION_DEFAULT_ALLOCATION_LENGTH
-                )
+                allocation_obj.end_date = allocation_obj.project.get_default_allocation_end_date()
 
             allocation_obj.save()
 

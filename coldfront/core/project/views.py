@@ -25,6 +25,7 @@ from django.views.generic.edit import FormView
 
 from coldfront.core.allocation.models import (
     Allocation,
+    AllocationStatusChoice,
 )
 from coldfront.core.grant.models import Grant
 from coldfront.core.project.forms import (
@@ -1190,7 +1191,7 @@ class ProjectReviewView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
         project_review_status_choice = ProjectReviewStatusChoice.objects.get(name="Pending")
 
         if not project_review_form.is_valid():
-            messages.error(request, "There was an error in processing  your project review.")
+            messages.error(request, "There was an error in processing your project review.")
             return redirect(project_obj)
 
         form_data = project_review_form.cleaned_data
@@ -1269,6 +1270,17 @@ class ProjectReviewCompleteView(LoginRequiredMixin, UserPassesTestMixin, View):
         project_review_obj.status = project_review_status_completed_obj
         project_review_obj.project.project_needs_review = False
         project_review_obj.save()
+
+        # update the allocation expiration date for expired and active allocations if project isn't archived
+        project = project_review_obj.project
+        active_allocation_status = AllocationStatusChoice.objects.get(name="Active")
+        if project.status.name != "Archived":
+            allocations = project.allocation_set.filter(status__name__in=["Active", "Expired"])
+            default_end_date = project.get_default_allocation_end_date()
+            for allocation in allocations:
+                allocation.end_date = default_end_date
+                allocation.status = active_allocation_status
+                allocation.save()
 
         messages.success(request, "Project review for {} has been completed".format(project_review_obj.project.title))
 
