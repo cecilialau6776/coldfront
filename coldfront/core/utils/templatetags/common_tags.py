@@ -57,6 +57,11 @@ def get_value_by_index(array, index):
     return array[index]
 
 
+@register.filter(name="abs")
+def abs_filter(value):
+    return abs(value)
+
+
 @register.simple_tag
 def navbar_active_item(menu_item, request):
     view_map = {

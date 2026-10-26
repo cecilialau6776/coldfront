@@ -146,6 +146,10 @@ class Allocation(TimeStampedModel):
         super().save(*args, **kwargs)
 
     @property
+    def show_renew(self):
+        return self.status.name in ["Active", "Expired"] and self.expires_in <= 60
+
+    @property
     def expires_in(self):
         """
         Returns:

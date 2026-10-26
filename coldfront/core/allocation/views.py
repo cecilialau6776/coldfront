@@ -870,7 +870,7 @@ class AllocationRemoveUsersView(LoginRequiredMixin, UserPassesTestMixin, Templat
             "New",
             "Renewal Requested",
         ]:
-            message = f"You cannot remove users from a allocation with status {allocation_obj.status.name}."
+            message = f"You cannot remove users from an allocation with status {allocation_obj.status.name}."
         if message:
             messages.error(request, message)
             return redirect(allocation_obj)
@@ -1165,8 +1165,9 @@ class AllocationRenewView(LoginRequiredMixin, UserPassesTestMixin, TemplateView)
 
         if allocation_obj.status.name not in [
             "Active",
+            "Expired",
         ]:
-            messages.error(request, f"You cannot renew a allocation with status {allocation_obj.status.name}.")
+            messages.error(request, f"You cannot renew an allocation with status {allocation_obj.status.name}.")
             return redirect(allocation_obj)
 
         if allocation_obj.project.needs_review:
@@ -1888,6 +1889,7 @@ class AllocationChangeView(LoginRequiredMixin, UserPassesTestMixin, FormView):
 
         if allocation_obj.status.name not in [
             "Active",
+            "Expired",
             "Renewal Requested",
             "Payment Pending",
             "Payment Requested",

@@ -234,14 +234,20 @@ Project Detail
                                 <button type="submit" name="action" value="deny" class="btn btn-link d-inline p-0 confirm-activate" title="Deny"><i class="fas fa-x" aria-hidden="true"></i><span class="visually-hidden">Deny</span></button>
                             </form>
                             {% endif %}
-                            {% if allocation.is_locked and allocation.status.name == 'Active' and allocation.expires_in <= 60 and allocation.expires_in >= 0 %}
+                            {% if allocation.is_locked and allocation.show_renew %}
                             <span class="badge bg-warning"><i class="far fa-clock" aria-hidden="true"></i>
                                 Expires in {{allocation.expires_in}} day{{allocation.expires_in|pluralize}} <br> Not renewable
                             </span>
-                            {% elif is_allowed_to_update_project and settings.ALLOCATION_ENABLE_ALLOCATION_RENEWAL and allocation.status.name == 'Active' and allocation.expires_in <= 60 and allocation.expires_in >= 0 %}
+                            {% elif is_allowed_to_update_project and settings.ALLOCATION_ENABLE_ALLOCATION_RENEWAL and allocation.show_renew %}
                             <a href="{% url 'allocation-renew' allocation.pk %}">
                                 <span class="badge bg-warning"><i class="fas fa-redo-alt" aria-hidden="true"></i>
+                                    {% if allocation.expires_in > 0 %}
                                     Expires in {{allocation.expires_in}} day{{allocation.expires_in|pluralize}} <br> Click to renew
+                                    {% elif allocation.expires_in == 0 %}
+                                    Expires today <br> Click to renew
+                                    {% else %}
+                                    Expired {{allocation.expires_in|abs}} day{{allocation.expires_in|abs|pluralize}} ago <br> Click to renew
+                                    {% endif %}
                                 </span>
                             </a>
                             {% endif %}
@@ -579,32 +585,32 @@ Project Detail
 {% block javascript %}
 {{ block.super }}
 <script>
- document.addEventListener('DOMContentLoaded', function() {
-     $("#selectAll").click(function () {
-         $("input[id^='email_notifications_for_user_id_']").not(":disabled").prop('checked', $(this).prop('checked')).change();
-     });
+    document.addEventListener('DOMContentLoaded', function() {
+        $("#selectAll").click(function () {
+            $("input[id^='email_notifications_for_user_id_']").not(":disabled").prop('checked', $(this).prop('checked')).change();
+        });
 
-     $("[id^=email_notifications_for_user_id_]").change(function() {
-         var checked = $(this).prop('checked');
-         var user_project_id = Number($(this).attr('id').split("_").pop());
+        $("[id^=email_notifications_for_user_id_]").change(function() {
+            var checked = $(this).prop('checked');
+            var user_project_id = Number($(this).attr('id').split("_").pop());
 
-         $.ajax({
-             headers: { 'X-CSRFToken': getCookie('csrftoken') },
-             type: "POST",
-             url: "/project/project-user-update-email-notification/",
-             data: {
-                 user_project_id: user_project_id,
-                 checked: checked
-             },
-             success: function (data) {
-                 $("#alert_div").html('<div class="alert alert-success alert-dismissible"><button type="button" class="btn-close" data-bs-dismiss="alert"></button><strong>Success!</strong> Email notification updated.</div>')
-             },
-             error: function (xhr, status, error) {
-                 $("#alert_div").html('<div class="alert alert-danger alert-dismissible"><button type="button" class="btn-close" data-bs-dismiss="alert"></button><strong>Error!</strong> Failed updating email notification.</div>')
-             }
-         });
-     });
- });
+            $.ajax({
+                headers: { 'X-CSRFToken': getCookie('csrftoken') },
+                type: "POST",
+                url: "/project/project-user-update-email-notification/",
+                data: {
+                    user_project_id: user_project_id,
+                    checked: checked
+                },
+                success: function (data) {
+                    $("#alert_div").html('<div class="alert alert-success alert-dismissible"><button type="button" class="btn-close" data-bs-dismiss="alert"></button><strong>Success!</strong> Email notification updated.</div>')
+                },
+                error: function (xhr, status, error) {
+                    $("#alert_div").html('<div class="alert alert-danger alert-dismissible"><button type="button" class="btn-close" data-bs-dismiss="alert"></button><strong>Error!</strong> Failed updating email notification.</div>')
+                }
+            });
+        });
+    });
 </script>
 
 {% endblock %}
