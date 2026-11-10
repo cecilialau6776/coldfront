@@ -230,7 +230,7 @@ We do not have information about your research. Please provide a detailed descri
         end_date_str = self.get_attribute("Project End Date")
         if end_date_str:
             end_date = datetime.datetime.strptime(end_date_str, "%Y-%m-%d").date()
-        if end_date and end_date <= (today + datetime.timedelta(weeks=52 + 52 // 2)):
+        if end_date and end_date <= (today + datetime.timedelta(weeks=52 + 52 // 2)) and end_date > today:
             return end_date
         next_review = self.next_needs_review
         if next_review:
