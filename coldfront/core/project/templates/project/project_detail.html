@@ -431,6 +431,8 @@ Project Detail
                 <thead>
                     <tr>
                         <th scope="col">Title, Author, and Journal</th>
+                        <th scope="col">Used RC</th>
+                        <th scope="col">Cited RC</th>
                         <th scope="col">Year</th>
                     </tr>
                 </thead>
@@ -445,6 +447,8 @@ Project Detail
                             <br><strong>Author: </strong>{{ publication.author}}
                             <br><strong>Journal: </strong>{{ publication.journal}}
                         </td>
+                        <td>{{ publication.used_rc | convert_boolean_to_icon }}</td>
+                        <td>{{ publication.cited_rc | convert_boolean_to_icon }}</td>
                         <td class="text-nowrap">{{ publication.year }}</td>
                     </tr>
                     {% endfor %}
